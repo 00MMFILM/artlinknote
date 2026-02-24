@@ -259,9 +259,11 @@ struct ContentView: View {
     }
 
     private func duplicateNote(_ note: Note) {
-        var copy = Note.blank()
+        var copy = Note.blank(field: note.field)
         copy.title = note.title + " (Copy)"
         copy.body = note.body
+        copy.tags = note.tags
+        copy.seriesName = note.seriesName
         copy.starred = false
         store.upsert(copy)
     }

@@ -1,22 +1,25 @@
-// GOAL: Editor with Title, Star toggle, TextEditor.
+// GOAL: Editor with Title, Star toggle, TextEditor, AI Analysis.
 // - Progressive zoom levels: Keywords, Line, Brief, Full
 // - onChange(note) -> store.upsert(newValue) via closure.
-// - Local heuristic-based keyword extraction (no external API).
+// - AI analysis button with server proxy call + shimmer loading.
+// - AI result card with collapse/expand.
 
 import SwiftUI
 
 struct NoteEditorView: View {
     @State private var draft: Note
     @State private var zoomLevel: NotesStore.SummaryLevel? = nil
+    @State private var isAnalyzing: Bool = false
+    @State private var aiExpanded: Bool = true
     let onCommit: (Note) -> Void
     @EnvironmentObject private var store: NotesStore
-    
-    
+
+
     init(note: Note, onCommit: @escaping (Note) -> Void) {
         _draft = State(initialValue: note)
         self.onCommit = onCommit
     }
-    
+
     var body: some View {
         VStack(spacing: 16) {
             // Header with title and star
@@ -54,8 +57,8 @@ struct NoteEditorView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
-            
-            
+
+
             // Progressive Zoom Control (Always visible - Fixed UI)
             VStack(alignment: .leading, spacing: 12) {
                 // Custom Segment Control - Always visible
@@ -89,7 +92,7 @@ struct NoteEditorView: View {
                         .accessibilityLabel("\(level.displayName) view")
                         .accessibilityHint("Switch to \(level.displayName.lowercased()) view mode")
                         .accessibilityAddTraits(level == zoomLevel ? .isSelected : [])
-                        
+
                         if level.rawValue < NotesStore.SummaryLevel.allCases.count {
                             Divider()
                                 .frame(height: 20)
@@ -104,7 +107,7 @@ struct NoteEditorView: View {
                 )
             }
             .padding(.horizontal)
-            
+
             // Content Area - Either Normal Editor or Progressive View
             if let currentLevel = zoomLevel {
                 // Progressive Content Stack
@@ -126,6 +129,12 @@ struct NoteEditorView: View {
                                     removal: .move(edge: .top).combined(with: .opacity)
                                 ))
                             }
+
+                            // AI Analysis Section (visible at full level)
+                            if currentLevel == .full {
+                                aiAnalysisSection
+                                    .id("ai-section")
+                            }
                         }
                         .padding(.horizontal)
                     }
@@ -143,72 +152,37 @@ struct NoteEditorView: View {
                 .frame(maxHeight: .infinity, alignment: .top)
             } else {
                 // Normal TextEditor Mode
-                ZStack(alignment: .topLeading) {
-                    if draft.body.isEmpty {
-                        Text("Write your note…")
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 12)
-                            .padding(.top, 12)
-                            .allowsHitTesting(false)
-                    }
-                    TextEditor(text: Binding(
-                        get: { draft.body },
-                        set: { newValue in 
-                            draft.body = newValue
-                            draft.touch()
-                            onCommit(draft)
-                        }
-                    ))
-                        .font(.system(.body, design: .serif))
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 200)
-                        .padding(8)
-                }
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal)
-                .frame(maxHeight: .infinity, alignment: .top)
-            }
-
-            // MARK: - Reserved Space for Future AI Chatbot Integration
-            // Beats Section Toggle - COMMENTED OUT FOR FUTURE AI CHATBOT USE
-            if zoomLevel == .full {
-                VStack(alignment: .leading, spacing: 8) {
-                    // Reserved grey layout space - can be used for AI chatbot UI
-                    Rectangle()
-                        .fill(.clear)
-                        .frame(height: 60) // Maintains layout space
-                    
-                    /* COMMENTED OUT - BEATS FUNCTIONALITY
-                    HStack {
-                        Text("Beats").font(.caption.smallCaps()).foregroundStyle(.secondary)
-                        Spacer()
-                        Button(showBeats ? "Hide" : "Show") { showBeats.toggle() }
-                            .font(.caption)
-                    }
-                    if showBeats {
-                        let beats = store.beats(for: draft)
-                        if beats.isEmpty {
-                            Text("No beats detected. Use blank lines or --- separators.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 10) {
-                                    ForEach(beats.prefix(12), id: \..self) { b in
-                                        Text(b.trimmingCharacters(in: .whitespaces).prefix(80))
-                                            .font(.system(.footnote, design: .serif))
-                                            .padding(8)
-                                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-                                            .frame(minWidth: 120, alignment: .leading)
-                                    }
-                                }
-                                .padding(.vertical, 4)
+                ScrollView {
+                    VStack(spacing: 16) {
+                        ZStack(alignment: .topLeading) {
+                            if draft.body.isEmpty {
+                                Text("Write your note…")
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.horizontal, 12)
+                                    .padding(.top, 12)
+                                    .allowsHitTesting(false)
                             }
+                            TextEditor(text: Binding(
+                                get: { draft.body },
+                                set: { newValue in
+                                    draft.body = newValue
+                                    draft.touch()
+                                    onCommit(draft)
+                                }
+                            ))
+                                .font(.system(.body, design: .serif))
+                                .scrollContentBackground(.hidden)
+                                .frame(minHeight: 200)
+                                .padding(8)
                         }
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+
+                        // AI Analysis Section (also in normal mode)
+                        aiAnalysisSection
                     }
-                    */
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
+                .frame(maxHeight: .infinity, alignment: .top)
             }
         }
         .padding(.top, 16)
@@ -223,8 +197,184 @@ struct NoteEditorView: View {
             onCommit(copy)
         }
     }
-    
+
+    // MARK: - AI Analysis Section
+    @ViewBuilder
+    private var aiAnalysisSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // AI Analysis Button
+            if !isAnalyzing {
+                Button {
+                    Task { await runAIAnalysis() }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("🤖")
+                            .font(.system(size: 16))
+                        Text("AI 분석")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.pink, Color.pink.opacity(0.8)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 12)
+                    )
+                    .shadow(color: .pink.opacity(0.3), radius: 6, y: 3)
+                }
+                .buttonStyle(.plain)
+                .disabled(draft.body.trimmed().isEmpty)
+                .opacity(draft.body.trimmed().isEmpty ? 0.5 : 1.0)
+                .accessibilityLabel("AI 분석 시작")
+            }
+
+            // Loading Shimmer
+            if isAnalyzing {
+                AIShimmerView()
+            }
+
+            // AI Result Card
+            if let comment = draft.aiComment, !comment.isEmpty, !isAnalyzing {
+                AICommentCard(comment: comment, isExpanded: $aiExpanded)
+            }
+        }
+    }
+
+    // MARK: - AI Analysis Action
+    private func runAIAnalysis() async {
+        guard !draft.body.trimmed().isEmpty else { return }
+
+        isAnalyzing = true
+        HapticManager.medium()
+
+        let result = await analyzeNote(
+            field: draft.field,
+            content: draft.body,
+            savedNotes: store.notes,
+            userProfile: .empty // TODO: wire up real user profile
+        )
+
+        draft.aiComment = result
+        draft.touch()
+        onCommit(draft)
+
+        isAnalyzing = false
+        aiExpanded = true
+        HapticManager.success()
+    }
+
     private func toggleStar() { draft.starred.toggle(); draft.touch(); onCommit(draft) }
+}
+
+// MARK: - AI Shimmer Loading View
+struct AIShimmerView: View {
+    @State private var shimmerOffset: CGFloat = -200
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(0..<4, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(.systemGray5))
+                    .frame(height: 14)
+                    .frame(maxWidth: i == 3 ? 180 : .infinity)
+                    .overlay(
+                        LinearGradient(
+                            colors: [.clear, Color.white.opacity(0.4), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .offset(x: shimmerOffset)
+                    )
+                    .clipped()
+            }
+        }
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.pink.opacity(0.2), lineWidth: 1)
+        )
+        .onAppear {
+            withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                shimmerOffset = 400
+            }
+        }
+    }
+}
+
+// MARK: - AI Comment Card
+struct AICommentCard: View {
+    let comment: String
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header
+            Button {
+                withAnimation(.spring(response: 0.3)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.pink, .pink.opacity(0.7)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Text("🤖")
+                                .font(.system(size: 12))
+                        )
+
+                    Text("AI 분석 결과")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                }
+            }
+            .buttonStyle(.plain)
+
+            // Content
+            if isExpanded {
+                Text(comment)
+                    .font(.system(.subheadline, design: .serif))
+                    .lineSpacing(4)
+                    .foregroundStyle(.primary.opacity(0.9))
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.pink.opacity(0.3), Color.pink.opacity(0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.5
+                )
+        )
+        .shadow(color: .pink.opacity(0.08), radius: 8, y: 4)
+    }
 }
 
 // MARK: - Progressive Level View Component
@@ -234,7 +384,7 @@ struct ProgressiveLevelView: View {
     let store: NotesStore
     let isCurrentLevel: Bool
     let onCommit: (Note) -> Void
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Level Header
@@ -242,15 +392,15 @@ struct ProgressiveLevelView: View {
                 Image(systemName: level.icon)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(isCurrentLevel ? .blue : .secondary)
-                
+
                 Text(levelTitle)
                     .font(.system(size: 14, weight: .semibold, design: .default))
                     .foregroundStyle(isCurrentLevel ? .blue : .secondary)
                     .textCase(.uppercase)
                     .tracking(0.5)
-                
+
                 Spacer()
-                
+
                 if isCurrentLevel {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 10, weight: .medium))
@@ -258,7 +408,7 @@ struct ProgressiveLevelView: View {
                         .rotationEffect(.degrees(180))
                 }
             }
-            
+
             // Level Content
             Group {
                 if level == .full {
@@ -273,7 +423,7 @@ struct ProgressiveLevelView: View {
                         }
                         TextEditor(text: Binding(
                             get: { draft.body },
-                            set: { newValue in 
+                            set: { newValue in
                                 draft.body = newValue
                                 draft.touch()
                                 onCommit(draft)
@@ -292,11 +442,11 @@ struct ProgressiveLevelView: View {
                 } else {
                     // Summary Content with special handling for Keywords
                     let summaryText = store.summary(for: draft, level: level)
-                    
+
                     if level == .keywords {
                         // Special keyword and tags display
                         KeywordTagsDisplayView(
-                            summaryText: summaryText, 
+                            summaryText: summaryText,
                             noteBody: draft.body,
                             isCurrentLevel: isCurrentLevel
                         )
@@ -326,7 +476,7 @@ struct ProgressiveLevelView: View {
         }
         .padding(.vertical, 8)
     }
-    
+
     private var levelTitle: String {
         switch level {
         case .keywords: return "Keywords"

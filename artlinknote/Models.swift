@@ -7,6 +7,74 @@ import Combine
 import Security
 #endif
 
+// MARK: - Field Enum
+enum Field: String, Codable, CaseIterable, Identifiable, Hashable {
+    case acting, music, art, dance, literature, film
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .acting: return "연기"
+        case .music: return "음악"
+        case .art: return "미술"
+        case .dance: return "무용"
+        case .literature: return "문학"
+        case .film: return "영화"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .acting: return "🎭"
+        case .music: return "🎵"
+        case .art: return "🎨"
+        case .dance: return "💃"
+        case .literature: return "📖"
+        case .film: return "🎬"
+        }
+    }
+
+    var englishKeyword: String {
+        switch self {
+        case .acting: return "acting"
+        case .music: return "music"
+        case .art: return "art"
+        case .dance: return "dance"
+        case .literature: return "literature"
+        case .film: return "film"
+        }
+    }
+}
+
+// MARK: - UserProfile
+struct UserProfile: Codable, Hashable {
+    var name: String
+    var email: String
+    var fields: [Field]
+    var userType: String
+    var roleModels: [String]
+    var interests: [String]
+
+    static let empty = UserProfile(name: "", email: "", fields: [], userType: "", roleModels: [], interests: [])
+}
+
+// MARK: - Goal
+struct Goal: Identifiable, Codable, Hashable {
+    var id: UUID
+    var title: String
+    var field: Field
+    var targetCount: Int
+    var currentCount: Int
+    var deadline: Date
+    var completed: Bool
+
+    static func blank(field: Field = .acting) -> Goal {
+        Goal(id: UUID(), title: "", field: field, targetCount: 10, currentCount: 0, deadline: Date().addingTimeInterval(30 * 86400), completed: false)
+    }
+}
+
+// MARK: - Note
 struct Note: Identifiable, Codable, Hashable {
     var id: UUID
     var title: String
@@ -16,14 +84,38 @@ struct Note: Identifiable, Codable, Hashable {
     // Tier A extensions
     var levelSummaries: [Int: String]? // zoom summaries cache (1=line,2=bullets,3=brief,4=full)
     var beatsCache: [String]? // extracted beat segments (order preserved)
+    // v2 extensions
+    var aiComment: String?
+    var field: Field
+    var tags: [String]
+    var seriesName: String?
+
     var isEmpty: Bool { title.trimmed().isEmpty && body.trimmed().isEmpty }
     mutating func touch() { updatedAt = Date() }
-    static func blank() -> Note { Note(id: UUID(), title: "", body: "", starred: false, updatedAt: Date()) }
+    static func blank(field: Field = .acting) -> Note {
+        Note(id: UUID(), title: "", body: "", starred: false, updatedAt: Date(), field: field, tags: [])
+    }
+
+    // Custom decoding for backwards compatibility with existing notes.json
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        body = try container.decode(String.self, forKey: .body)
+        starred = try container.decode(Bool.self, forKey: .starred)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        levelSummaries = try container.decodeIfPresent([Int: String].self, forKey: .levelSummaries)
+        beatsCache = try container.decodeIfPresent([String].self, forKey: .beatsCache)
+        aiComment = try container.decodeIfPresent(String.self, forKey: .aiComment)
+        field = try container.decodeIfPresent(Field.self, forKey: .field) ?? .acting
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        seriesName = try container.decodeIfPresent(String.self, forKey: .seriesName)
+    }
 }
 
 extension Note {
-    static let sampleA = Note(id: UUID(), title: "Beat Shift Monologue", body: "Character wrestles with self-doubt then pivots to resolve.", starred: true, updatedAt: Date().addingTimeInterval(-3600))
-    static let sampleB = Note(id: UUID(), title: "Cold Read Practice", body: "Focus on pacing. Emphasize subtext in second paragraph.", starred: false, updatedAt: Date().addingTimeInterval(-7200))
+    static let sampleA = Note(id: UUID(), title: "Beat Shift Monologue", body: "Character wrestles with self-doubt then pivots to resolve.", starred: true, updatedAt: Date().addingTimeInterval(-3600), field: .acting, tags: ["#monologue", "#beat"])
+    static let sampleB = Note(id: UUID(), title: "Cold Read Practice", body: "Focus on pacing. Emphasize subtext in second paragraph.", starred: false, updatedAt: Date().addingTimeInterval(-7200), field: .acting, tags: ["#rehearsal"])
     static var seed: [Note] { [sampleA, sampleB] }
 }
 
@@ -40,7 +132,7 @@ final class NotesStore: ObservableObject {
     init(notes: [Note] = []) { self.notes = notes }
     
     @discardableResult
-    func createNew() -> Note { var note = Note.blank(); note.touch(); notes.insert(note, at: 0); scheduleSave(); return note }
+    func createNew(field: Field = .acting) -> Note { var note = Note.blank(field: field); note.touch(); notes.insert(note, at: 0); scheduleSave(); return note }
     func upsert(_ note: Note) { if let i = notes.firstIndex(where: { $0.id == note.id }) { notes[i] = note } else { notes.insert(note, at: 0) }; scheduleSave() }
     func delete(id: UUID) { notes.removeAll { $0.id == id }; scheduleSave() }
     func toggleStar(id: UUID) { guard let i = notes.firstIndex(where: { $0.id == id }) else { return }; notes[i].starred.toggle(); notes[i].touch(); sortInPlace(); scheduleSave() }
