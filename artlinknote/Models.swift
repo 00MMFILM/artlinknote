@@ -92,6 +92,18 @@ struct Note: Identifiable, Codable, Hashable {
 
     var isEmpty: Bool { title.trimmed().isEmpty && body.trimmed().isEmpty }
     mutating func touch() { updatedAt = Date() }
+
+    // Explicit memberwise init (required because custom Decodable init removes the auto-generated one)
+    init(id: UUID, title: String, body: String, starred: Bool, updatedAt: Date,
+         levelSummaries: [Int: String]? = nil, beatsCache: [String]? = nil,
+         aiComment: String? = nil, field: Field = .acting, tags: [String] = [],
+         seriesName: String? = nil) {
+        self.id = id; self.title = title; self.body = body; self.starred = starred
+        self.updatedAt = updatedAt; self.levelSummaries = levelSummaries
+        self.beatsCache = beatsCache; self.aiComment = aiComment
+        self.field = field; self.tags = tags; self.seriesName = seriesName
+    }
+
     static func blank(field: Field = .acting) -> Note {
         Note(id: UUID(), title: "", body: "", starred: false, updatedAt: Date(), field: field, tags: [])
     }
