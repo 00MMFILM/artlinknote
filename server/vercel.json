@@ -8,8 +8,30 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "src": "/api/crawl-trigger",
+      "dest": "/api/crawl-trigger.js"
+    },
+    {
+      "src": "/api/crawl-status",
+      "dest": "/api/crawl-status.js"
+    },
+    {
+      "src": "/api/matching-feed",
+      "dest": "/api/matching-feed.js"
+    },
+    {
+      "src": "/api/ai-analyze",
+      "dest": "/api/ai-analyze.js"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/crawl-trigger",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/crawl-trigger",
+      "schedule": "0 9 * * *"
     }
   ]
 }
