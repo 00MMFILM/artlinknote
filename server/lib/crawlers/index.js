@@ -4,6 +4,10 @@ const castingnara = require("./castingnara");
 const otr = require("./otr");
 const contestkorea = require("./contestkorea");
 const artnuri = require("./artnuri");
+const artnet = require("./artnet");
+const kofic = require("./kofic");
+const artculture = require("./artculture");
+const artmore = require("./artmore");
 
 const ALL_CRAWLERS = [
   filmmakers,
@@ -12,6 +16,10 @@ const ALL_CRAWLERS = [
   otr,
   contestkorea,
   artnuri,
+  artnet,
+  kofic,
+  artculture,
+  artmore,
 ];
 
 module.exports = { ALL_CRAWLERS };
