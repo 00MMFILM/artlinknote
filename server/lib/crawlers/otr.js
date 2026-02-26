@@ -5,47 +5,51 @@ const LIST_URL = `${BASE_URL}/audition/`;
 const SOURCE = "otr";
 const MAX_ITEMS = 20;
 
+// Categories to skip (notices, etc.)
+const SKIP_CATEGORIES = ["공지사항"];
+
 async function crawl() {
   const $ = await fetchHTML(LIST_URL);
   const items = [];
 
-  // OTR uses table-based board listing
-  $("tr").each((i, el) => {
+  // OTR uses mangboard (WordPress plugin) with table-based listing
+  // Links are full URLs like https://otr.co.kr/audition/?vid=12345
+  $("a[href*='vid=']").each((i, el) => {
     if (items.length >= MAX_ITEMS) return false;
 
-    const $row = $(el);
-    const $link = $row.find("a[href*='vid=']").first();
-    if (!$link.length) return;
-
-    const href = $link.attr("href");
+    const $link = $(el);
+    const href = $link.attr("href") || "";
     if (!href) return;
 
-    const title = cleanText($link.text());
+    // Get title from title attribute (more reliable) or text
+    const title = cleanText($link.attr("title") || $link.text());
     if (!title || title.length < 3) return;
+
+    // Extract category from bracket prefix: [연극], [뮤지컬], etc.
+    const catMatch = title.match(/\[([^\]]+)\]/);
+    const category = catMatch ? catMatch[1] : "";
+
+    // Skip notices
+    if (SKIP_CATEGORIES.includes(category)) return;
 
     const sourceUrl = href.startsWith("http") ? href : `${BASE_URL}${href}`;
 
-    // Extract metadata from table cells
-    const cells = $row.find("td");
+    // Extract metadata from parent row
+    const $row = $link.closest("tr");
     let pay = "";
     let deadline = "";
-    let category = "";
 
-    // Category from bracket prefix: [연극], [뮤지컬], etc.
-    const catMatch = title.match(/\[([^\]]+)\]/);
-    if (catMatch) category = catMatch[1];
-
-    cells.each((j, cell) => {
-      const text = cleanText($(cell).text());
-      // Pay column often contains "만원" or "협의"
-      if (/\d+만원|협의/.test(text) && !pay) pay = text;
-      // Deadline column: date format
-      const dateMatch = text.match(/\d{4}-\d{2}-\d{2}/);
-      if (dateMatch && !deadline) deadline = dateMatch[0];
-    });
+    if ($row.length) {
+      $row.find("td").each((j, cell) => {
+        const text = cleanText($(cell).text());
+        if (/\d+만원|협의/.test(text) && !pay) pay = text;
+        const dateMatch = text.match(/\d{4}-\d{2}-\d{2}/);
+        if (dateMatch && !deadline) deadline = dateMatch[0];
+      });
+    }
 
     items.push({
-      title: title.replace(/\[[^\]]+\]\s*/, ""), // Remove category bracket from title
+      title: title.replace(/\[[^\]]+\]\s*/, ""),
       source_url: sourceUrl,
       company: "",
       category: category || "오디션",

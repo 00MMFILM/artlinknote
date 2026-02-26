@@ -6,7 +6,11 @@ const SOURCE = "castingnara";
 const MAX_ITEMS = 20;
 
 async function crawl() {
-  const $ = await fetchHTML(LIST_URL);
+  // First hit the main page to warm up session/cookies, then fetch list
+  try { await fetchHTML(BASE_URL, { skipCache: true }); } catch (_) {}
+  await randomDelay(500, 1500);
+
+  const $ = await fetchHTML(LIST_URL, { skipCache: true });
   const items = [];
 
   // castingnara.com uses guin_detail.php?num=... for individual posts
