@@ -9,13 +9,16 @@ async function crawl() {
   const $ = await fetchHTML(LIST_URL);
   const items = [];
 
-  // KOFIC uses table.bbs_ltype with onclick="fn_goDetailPage('ID')"
+  // KOFIC uses table.bbs_ltype with a[onclick="fn_goDetailPage('ID')"] inside rows
   $("table.bbs_ltype tr").each((i, el) => {
-    if (i === 0) return; // skip header
     if (items.length >= MAX_ITEMS) return false;
 
     const $row = $(el);
-    const onclick = $row.attr("onclick") || "";
+    // fn_goDetailPage is on <a> tags, not <tr>
+    const $link = $row.find("a[onclick*='fn_goDetailPage']").first();
+    if (!$link.length) return;
+
+    const onclick = $link.attr("onclick") || "";
     const idMatch = onclick.match(/fn_goDetailPage\('(\d+)'\)/);
     if (!idMatch) return;
 
@@ -31,7 +34,7 @@ async function crawl() {
     const deadline = cleanText($(cells[6]).text()).replace(/\./g, "-");
 
     if (!title || title.length < 3) return;
-    if (status !== "구인중") return; // only active postings
+    if (!/구인중/.test(status)) return; // only active postings
 
     const sourceUrl = `${BASE_URL}/kofic/business/infm/findJobDetail.do?boardNumber=${id}`;
 
