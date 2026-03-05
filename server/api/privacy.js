@@ -41,7 +41,7 @@ module.exports = async function handler(req, res) {
 <p>앱을 삭제하면 기기에 저장된 모든 데이터가 함께 삭제됩니다.</p>
 
 <h2>7. 문의</h2>
-<p>개인정보 관련 문의: <a href="mailto:00mmfilm@gmail.com">00mmfilm@gmail.com</a></p>
+<p>개인정보 관련 문의: <a href="mailto:lcy1152@naver.com">lcy1152@naver.com</a></p>
 
 <h2>8. 변경사항</h2>
 <p>본 방침이 변경될 경우 앱 업데이트를 통해 안내합니다.</p>
