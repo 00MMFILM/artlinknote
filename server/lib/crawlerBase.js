@@ -224,6 +224,68 @@ async function logCrawl(source, { itemsFound = 0, itemsNew = 0, status = "succes
   });
 }
 
+// --- Training Content Quality Filter ---
+
+// 광고/협찬 키워드 (하나라도 포함되면 즉시 제외)
+const AD_REJECT_KEYWORDS = [
+  // 법적 광고 고지
+  "광고 포함", "유료 광고", "협찬", "소정의 원고료", "소정의 수수료",
+  "제품을 제공받", "서비스를 제공받", "원고료를 지급", "원고료를 제공",
+  "대가를 받고", "경제적 대가", "무상으로 제공",
+  // 제휴 마케팅
+  "쿠팡 파트너스", "쿠팡파트너스", "파트너스 활동", "일정액의 수수료",
+  "제휴 마케팅", "알리익스프레스 파트너",
+  // 체험단/리뷰단
+  "체험단", "기자단", "리뷰단", "서포터즈", "앰배서더",
+  // 쇼핑/구매 유도
+  "최저가", "특가", "할인코드", "쿠폰코드", "추천인코드",
+  "할인링크", "구매링크", "핫딜", "타임세일",
+  // 체험단 플랫폼명
+  "레뷰", "리뷰노트", "태그바이", "리뷰플레이스",
+];
+
+// 연습일지 관련 키워드 (최소 1개 이상 포함 필수)
+const PRACTICE_NOTE_KEYWORDS = [
+  // 공통
+  "연습", "레슨", "수업", "일지", "기록", "훈련", "트레이닝", "리허설",
+  "피드백", "복습", "루틴", "과제", "숙제", "노트",
+  // 연기
+  "대본", "캐릭터 분석", "장면", "동선", "감정", "발성", "호흡",
+  "즉흥", "합독", "셀프테이프", "모노로그", "감정연기",
+  // 음악
+  "악보", "음계", "코드", "보컬", "발성연습", "청음", "박자",
+  "테크닉", "곡 연습", "합주",
+  // 무용
+  "안무", "스트레칭", "턴", "동작", "바", "센터", "플로어",
+  "루틴", "테크닉", "컨디셔닝",
+  // 미술
+  "스케치", "드로잉", "크로키", "색감", "구도", "습작", "데생",
+  // 영화
+  "촬영일지", "편집", "콘티", "씬", "리딩", "현장",
+  // 문학
+  "집필", "퇴고", "초고", "원고", "창작",
+];
+
+const MIN_TRAINING_CONTENT_LENGTH = 500;
+
+function isTrainingContentValid(title, content) {
+  const fullText = `${title || ""} ${content || ""}`;
+
+  // 1) 최소 길이
+  if ((content || "").length < MIN_TRAINING_CONTENT_LENGTH) return false;
+
+  // 2) 광고 키워드 하드 리젝
+  for (const kw of AD_REJECT_KEYWORDS) {
+    if (fullText.includes(kw)) return false;
+  }
+
+  // 3) 연습일지 키워드 최소 1개 포함
+  const hasRelevantKeyword = PRACTICE_NOTE_KEYWORDS.some((kw) => fullText.includes(kw));
+  if (!hasRelevantKeyword) return false;
+
+  return true;
+}
+
 // --- Utility ---
 
 function delay(ms) {
@@ -234,13 +296,46 @@ function cleanText(text) {
   return (text || "").replace(/\s+/g, " ").trim();
 }
 
+// --- Training Data DB Operations ---
+
+async function upsertRawTraining(items) {
+  if (!supabase) throw new Error("Supabase not configured");
+  if (!items || items.length === 0) return { new: 0, total: 0 };
+
+  let newCount = 0;
+  for (const item of items) {
+    const record = {
+      source: item.source,
+      source_url: item.source_url,
+      field: item.field || classifyField(`${item.title || ""} ${item.content || ""}`),
+      title: item.title || null,
+      content: item.content,
+      processed: false,
+    };
+
+    const { error } = await supabase
+      .from("raw_training_content")
+      .upsert(record, { onConflict: "source_url", ignoreDuplicates: true });
+
+    if (error) {
+      console.error(`Upsert raw_training error for ${item.source_url}:`, error.message);
+    } else {
+      newCount++;
+    }
+  }
+
+  return { new: newCount, total: items.length };
+}
+
 module.exports = {
   fetchHTML,
   upsertPostings,
+  upsertRawTraining,
   logCrawl,
   classifyField,
   classifyTab,
   extractRequirements,
+  isTrainingContentValid,
   delay,
   randomDelay,
   cleanText,

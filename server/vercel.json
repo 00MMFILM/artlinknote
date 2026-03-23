@@ -26,6 +26,14 @@
     {
       "src": "/api/privacy",
       "dest": "/api/privacy.js"
+    },
+    {
+      "src": "/api/training-crawl",
+      "dest": "/api/training-crawl.js"
+    },
+    {
+      "src": "/api/training-generate",
+      "dest": "/api/training-generate.js"
     }
   ],
   "crons": [
@@ -36,6 +44,22 @@
     {
       "path": "/api/crawl-trigger",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/training-generate",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/training-generate",
+      "schedule": "0 16 * * *"
     }
   ]
 }
