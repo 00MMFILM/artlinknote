@@ -62,7 +62,7 @@ async function crawl() {
     // Classify field from tags and title
     const tagText = tags.join(" ");
     const combined = `${title} ${tagText} ${company}`;
-    const field = classifyField(combined);
+    const field = classifyField(combined, "art");
 
     // Build category from hashtags (skip org name tags)
     const categoryTag = tags.find((t) =>

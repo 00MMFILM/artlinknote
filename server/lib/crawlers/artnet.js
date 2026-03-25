@@ -56,7 +56,7 @@ async function crawl() {
         item.deadline = dateMatch[dateMatch.length - 1].replace(/[./]/g, "-");
       }
 
-      item.field = classifyField(`${item.title} ${item.description}`);
+      item.field = classifyField(`${item.title} ${item.description}`, "art");
       item.tab = classifyTab(item.title, item.category, item.description);
 
       const tagWords = ["미술", "회화", "조각", "설치", "사진", "디자인", "공예", "공모전", "전시", "레지던시"];
@@ -66,7 +66,7 @@ async function crawl() {
       await randomDelay(1500, 3000);
     } catch (err) {
       console.error(`Detail fetch failed for ${item.source_url}:`, err.message);
-      item.field = classifyField(item.title);
+      item.field = classifyField(item.title, "art");
       item.tab = classifyTab(item.title, item.category, "");
     }
   }

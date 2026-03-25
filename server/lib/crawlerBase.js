@@ -77,14 +77,41 @@ const FIELD_KEYWORDS = {
   ],
 };
 
-function classifyField(text) {
-  if (!text) return "acting";
+// Staff/hiring keywords — these are industry jobs, NOT artist casting
+const STAFF_JOB_KEYWORDS = [
+  "채용", "정규직", "계약직", "아르바이트", "인턴", "담당자",
+  "매니저 모집", "직원 모집", "직원 채용", "신입 모집", "경력 모집",
+  "하우스어텐던트", "하우스 어셔", "어텐던트", "안내원",
+  "사무", "운영 담당", "홍보 담당", "마케팅 담당",
+  "에디터 모집", "감수자", "프로젝트 매니저",
+  "취업", "커피챗", "상담 신청", "지원사업 공모", "준비금",
+];
+
+function isStaffJob(text) {
+  return STAFF_JOB_KEYWORDS.some((kw) => text.includes(kw));
+}
+
+function classifyField(text, defaultField) {
+  const fallback = defaultField || "acting";
+  if (!text) return fallback;
+
+  // If it's a staff/hiring post, never classify as acting
+  const staffJob = isStaffJob(text);
+
   const scores = {};
   for (const [field, keywords] of Object.entries(FIELD_KEYWORDS)) {
     scores[field] = keywords.filter((kw) => text.includes(kw)).length;
   }
   const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
-  return best[1] > 0 ? best[0] : "acting";
+
+  let result = best[1] > 0 ? best[0] : fallback;
+
+  // Staff/hiring posts go to "etc" (기타) category
+  if (staffJob) {
+    result = "etc";
+  }
+
+  return result;
 }
 
 // --- Tab Classification ---

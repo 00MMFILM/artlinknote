@@ -101,7 +101,7 @@ async function crawl() {
       if (bodyText) {
         item.description = bodyText.slice(0, 2000);
       }
-      item.field = classifyField(`${item.title} ${item.description} ${item.category}`);
+      item.field = classifyField(`${item.title} ${item.description} ${item.category}`, "art");
       item.tab = classifyTab(item.title, item.category, item.description);
       await randomDelay(1500, 4000);
     } catch (err) {

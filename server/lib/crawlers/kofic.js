@@ -62,12 +62,12 @@ async function crawl() {
       if (bodyText) {
         item.description = bodyText.slice(0, 2000);
       }
-      item.field = classifyField(`${item.title} ${item.description} ${item.category}`);
+      item.field = classifyField(`${item.title} ${item.description} ${item.category}`, "film");
       item.tab = classifyTab(item.title, item.category, item.description);
       await randomDelay(1500, 3000);
     } catch (err) {
       console.error(`Detail fetch failed for ${item.source_url}:`, err.message);
-      item.field = classifyField(`${item.title} ${item.category}`);
+      item.field = classifyField(`${item.title} ${item.category}`, "film");
       item.tab = classifyTab(item.title, item.category, "");
     }
   }

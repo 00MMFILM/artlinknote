@@ -50,7 +50,7 @@ async function crawl() {
           deadline: "",
           tags: [category, "영화", "구인"].filter(Boolean),
           requirements: {},
-          field: classifyField(`${title} ${company} ${category}`),
+          field: classifyField(`${title} ${company} ${category}`, "film"),
           tab: classifyTab(title, category, ""),
         });
       }

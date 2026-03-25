@@ -70,7 +70,7 @@ async function crawl() {
 
   // Classify fields
   for (const item of items) {
-    item.field = classifyField(`${item.title} ${item.category}`);
+    item.field = classifyField(`${item.title} ${item.category}`, "art");
     item.tab = classifyTab(item.title, item.category, "");
 
     const tagWords = ["미술", "디자인", "사진", "영상", "음악", "문학", "웹툰", "공모전", "공예"];

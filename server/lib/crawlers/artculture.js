@@ -64,7 +64,7 @@ async function crawl() {
       const orgMatch = item.description.match(/주최\s*[:.·]\s*([^\n,]+)/);
       if (orgMatch) item.company = cleanText(orgMatch[1]).slice(0, 50);
 
-      item.field = classifyField(`${item.title} ${item.description}`);
+      item.field = classifyField(`${item.title} ${item.description}`, "art");
       item.tab = classifyTab(item.title, item.category, item.description);
 
       const tagWords = ["미술", "사진", "디자인", "음악", "무용", "영상", "문학", "공모전", "공예"];
@@ -74,7 +74,7 @@ async function crawl() {
       await randomDelay(1500, 3000);
     } catch (err) {
       console.error(`Detail fetch failed for ${item.source_url}:`, err.message);
-      item.field = classifyField(item.title);
+      item.field = classifyField(item.title, "art");
       item.tab = classifyTab(item.title, item.category, "");
     }
   }
