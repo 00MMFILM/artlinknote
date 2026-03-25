@@ -1,5 +1,5 @@
 const { ALL_CRAWLERS } = require("../lib/crawlers");
-const { upsertPostings, logCrawl } = require("../lib/crawlerBase");
+const { upsertPostings, logCrawl, expireOldPostings } = require("../lib/crawlerBase");
 
 // Vercel Hobby has 60s timeout. Run a subset of crawlers per invocation.
 // Cron runs 2x/day, so we rotate batches: even hours = batch A, odd hours = batch B
@@ -78,6 +78,15 @@ module.exports = async function handler(req, res) {
     }
   }
 
+  // Expire past-deadline postings
+  let expired = 0;
+  try {
+    expired = await expireOldPostings();
+    if (expired > 0) console.log(`[crawl] Expired ${expired} past-deadline postings`);
+  } catch (e) {
+    console.error("[crawl] Expire error:", e.message);
+  }
+
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
   const batchLabel = singleSource ? singleSource : runAll ? "all" : `batch(${crawlers.map((c) => c.SOURCE).join(",")})`;
 
@@ -85,6 +94,7 @@ module.exports = async function handler(req, res) {
     message: "Crawl complete",
     batch: batchLabel,
     duration: `${duration}s`,
+    expired,
     results,
   });
 };

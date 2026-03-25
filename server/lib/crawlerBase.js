@@ -327,11 +327,31 @@ async function upsertRawTraining(items) {
   return { new: newCount, total: items.length };
 }
 
+// --- Expire Past-Deadline Postings ---
+
+async function expireOldPostings() {
+  if (!supabase) return 0;
+  const today = new Date().toISOString().split("T")[0];
+  const { data, error } = await supabase
+    .from("postings")
+    .update({ status: "inactive" })
+    .eq("status", "active")
+    .lt("deadline", today)
+    .not("deadline", "is", null)
+    .select("id");
+  if (error) {
+    console.error("[expire] Error:", error.message);
+    return 0;
+  }
+  return data ? data.length : 0;
+}
+
 module.exports = {
   fetchHTML,
   upsertPostings,
   upsertRawTraining,
   logCrawl,
+  expireOldPostings,
   classifyField,
   classifyTab,
   extractRequirements,
