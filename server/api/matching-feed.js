@@ -1,5 +1,31 @@
 const { supabase } = require("../lib/supabase");
 
+// Self-healing: trigger crawl if data is stale (> 24 hours)
+async function triggerCrawlIfStale() {
+  try {
+    const { data } = await supabase
+      .from("crawl_logs")
+      .select("started_at")
+      .order("started_at", { ascending: false })
+      .limit(1);
+    if (!data || data.length === 0) return;
+    const lastCrawl = new Date(data[0].started_at);
+    const hoursSince = (Date.now() - lastCrawl.getTime()) / 3600000;
+    if (hoursSince > 24) {
+      // Fire-and-forget: trigger crawl in background
+      const secret = process.env.CRON_SECRET;
+      const baseUrl = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "https://server-00mmfilms-projects.vercel.app";
+      fetch(`${baseUrl}/api/crawl-trigger`, {
+        method: "GET",
+        headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+        signal: AbortSignal.timeout(55000),
+      }).catch(() => {});
+    }
+  } catch {}
+}
+
 module.exports = async function handler(req, res) {
   // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -11,6 +37,9 @@ module.exports = async function handler(req, res) {
   if (!supabase) {
     return res.status(503).json({ error: "Database not configured" });
   }
+
+  // Check staleness in background (doesn't block response)
+  triggerCrawlIfStale();
 
   try {
     // Accept both GET query params and POST body

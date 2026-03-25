@@ -1,0 +1,54 @@
+name: Daily Crawl (Backup)
+
+# Backup cron in case Vercel Cron fails
+# Primary: Vercel Cron (06:00, 18:00 KST)
+# Backup: GitHub Actions (07:00, 19:00 KST) — 1 hour after Vercel
+
+on:
+  schedule:
+    # Batch A: 22:00 UTC = 07:00 KST (1hr after Vercel's 06:00 KST)
+    - cron: "0 22 * * *"
+    # Batch B: 10:00 UTC = 19:00 KST (1hr after Vercel's 18:00 KST)
+    - cron: "0 10 * * *"
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check last crawl freshness
+        id: check
+        run: |
+          STATUS=$(curl -sf "${{ secrets.SERVER_URL }}/api/crawl-status" || echo '{}')
+          LATEST=$(echo "$STATUS" | python3 -c "
+          import sys, json
+          from datetime import datetime, timezone
+          try:
+            data = json.load(sys.stdin)
+            sources = data.get('sources', [])
+            if not sources:
+              print('stale')
+            else:
+              latest = max(s['started_at'] for s in sources)
+              dt = datetime.fromisoformat(latest.replace('+00:00', '+00:00'))
+              age_hours = (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+              print('fresh' if age_hours < 18 else 'stale')
+          except:
+            print('stale')
+          ")
+          echo "status=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger crawl (only if stale)
+        if: steps.check.outputs.status == 'stale'
+        run: |
+          echo "Data is stale, triggering crawl..."
+          # Trigger batch crawl
+          curl -sf "${{ secrets.SERVER_URL }}/api/crawl-trigger" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 55 || true
+          echo "Crawl triggered."
+
+      - name: Skip (data is fresh)
+        if: steps.check.outputs.status == 'fresh'
+        run: echo "Data is fresh (< 18 hours old). Skipping crawl."
