@@ -1,6 +1,8 @@
 const { supabase } = require("../lib/supabase");
+const crypto = require("crypto");
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 30;
+const CONCURRENCY = 3;
 
 const FIELD_LABELS = {
   acting: "연기",
@@ -100,47 +102,47 @@ module.exports = async function handler(req, res) {
   const results = [];
   const startTime = Date.now();
 
-  for (const item of rawItems) {
-    // Check remaining time (leave 10s buffer)
-    if (Date.now() - startTime > 48000) {
-      results.push({ id: item.id, status: "skipped", reason: "timeout_approaching" });
-      continue;
-    }
-
+  async function processItem(item) {
     try {
       const { system, user } = buildPrompt(item.field, item.content);
       const feedback = await generateFeedback(system, user);
 
-      if (!feedback) {
-        results.push({ id: item.id, status: "error", error: "Empty AI response" });
-        continue;
-      }
+      if (!feedback) return { id: item.id, status: "error", error: "Empty AI response" };
 
-      // Insert into training_data
+      const noteContent = item.content.slice(0, 5000);
+      const contentHash = crypto.createHash("sha256").update(noteContent).digest("hex").slice(0, 32);
       const { error: insertError } = await supabase.from("training_data").insert({
         field: item.field,
-        note_content: item.content.slice(0, 5000),
+        note_content: noteContent,
         ai_feedback: feedback,
-        source: `crawl_${item.source}`,
+        content_hash: contentHash,
       });
 
       if (insertError) {
         console.error(`[training-generate] Insert error for ${item.id}:`, insertError.message);
-        results.push({ id: item.id, status: "error", error: insertError.message });
-        continue;
+        return { id: item.id, status: "error", error: insertError.message };
       }
 
-      // Mark as processed
-      await supabase
-        .from("raw_training_content")
-        .update({ processed: true })
-        .eq("id", item.id);
-
-      results.push({ id: item.id, status: "success", field: item.field });
+      await supabase.from("raw_training_content").update({ processed: true }).eq("id", item.id);
+      return { id: item.id, status: "success", field: item.field };
     } catch (err) {
       console.error(`[training-generate] Failed for ${item.id}:`, err.message);
-      results.push({ id: item.id, status: "error", error: err.message });
+      return { id: item.id, status: "error", error: err.message };
     }
+  }
+
+  // Process in parallel batches of CONCURRENCY
+  for (let i = 0; i < rawItems.length; i += CONCURRENCY) {
+    if (Date.now() - startTime > 46000) {
+      for (let j = i; j < rawItems.length; j++) {
+        results.push({ id: rawItems[j].id, status: "skipped", reason: "timeout_approaching" });
+      }
+      break;
+    }
+
+    const batch = rawItems.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(batch.map(processItem));
+    results.push(...batchResults);
   }
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);

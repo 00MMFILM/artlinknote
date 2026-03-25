@@ -4,7 +4,7 @@ const cheerio = require("cheerio");
 const SOURCE = "grounz";
 const API_BASE = "https://api.grounz.net";
 const SITE_BASE = "https://grounz.net";
-const MAX_ITEMS = 20;
+const MAX_ITEMS = 8;
 
 // 자유게시판(1), 질문답변(2), 정보게시판(5), 실용음악과(21)
 const CATEGORY_IDS = [1, 2, 5, 21];
@@ -27,23 +27,28 @@ function htmlToText(html) {
   return cleanText($.text());
 }
 
-async function crawl() {
+async function crawl({ timeBudget = 15000 } = {}) {
   const results = [];
   const seen = new Set();
+  const startTime = Date.now();
 
   for (const categoryId of CATEGORY_IDS) {
+    if (Date.now() - startTime > timeBudget) break;
+
     try {
       const data = await fetchAPI(`/community/articles?page=1&size=${MAX_ITEMS}&categoryId=${categoryId}`);
       const rows = data.rows || [];
 
       for (const row of rows) {
+        if (Date.now() - startTime > timeBudget) break;
+
         const postId = row.id;
         const sourceUrl = `${SITE_BASE}/community/view/${postId}`;
         if (seen.has(sourceUrl)) continue;
         seen.add(sourceUrl);
 
         try {
-          await randomDelay(1000, 2000);
+          await randomDelay(300, 600);
           const detail = await fetchAPI(`/community/articles/${postId}`);
 
           const title = detail.article?.title || "";
@@ -64,13 +69,13 @@ async function crawl() {
         }
       }
 
-      await randomDelay(1500, 3000);
+      await randomDelay(500, 1000);
     } catch (err) {
       console.error(`[${SOURCE}] Category ${categoryId} failed:`, err.message);
     }
   }
 
-  console.log(`[${SOURCE}] Collected ${results.length} items`);
+  console.log(`[${SOURCE}] Collected ${results.length} items in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
   return results;
 }
 

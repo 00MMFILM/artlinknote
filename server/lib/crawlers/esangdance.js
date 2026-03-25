@@ -2,9 +2,8 @@ const { fetchHTML, classifyField, cleanText, randomDelay, isTrainingContentValid
 
 const SOURCE = "esangdance";
 const BASE_URL = "https://www.esangdance.net";
-const MAX_PER_BOARD = 10;
+const MAX_PER_BOARD = 4;
 
-// 공개 접근 가능 보드 (로그인 불필요)
 const BOARDS = [
   { path: "/B01", label: "무용뉴스" },
   { path: "/N01", label: "공연정보" },
@@ -12,21 +11,22 @@ const BOARDS = [
   { path: "/B02", label: "콩쿨게시판" },
 ];
 
-async function crawl() {
+async function crawl({ timeBudget = 15000 } = {}) {
   const results = [];
   const seen = new Set();
+  const startTime = Date.now();
 
   for (const board of BOARDS) {
+    if (Date.now() - startTime > timeBudget) break;
+
     try {
       const listUrl = `${BASE_URL}${board.path}`;
       const $ = await fetchHTML(listUrl, { skipCache: true });
 
       const links = [];
-      // GnuBoard table-based board: title links inside table rows
       $("a.text-dark, a.link-secondary").each((i, el) => {
         if (links.length >= MAX_PER_BOARD) return false;
         const href = $(el).attr("href") || "";
-        // Match board detail URLs: /{boardCode}/{wr_id} or /bbs/board.php?bo_table=...&wr_id=...
         if ((href.includes(board.path + "/") || href.includes("wr_id=")) && !seen.has(href)) {
           const fullUrl = href.startsWith("http") ? href : `${BASE_URL}${href}`;
           seen.add(fullUrl);
@@ -35,8 +35,9 @@ async function crawl() {
       });
 
       for (const link of links) {
+        if (Date.now() - startTime > timeBudget) break;
         try {
-          await randomDelay(1500, 3000);
+          await randomDelay(300, 600);
           const detail$ = await fetchHTML(link, { skipCache: true });
 
           const title = cleanText(
@@ -58,13 +59,13 @@ async function crawl() {
         }
       }
 
-      await randomDelay(2000, 4000);
+      await randomDelay(500, 1000);
     } catch (err) {
       console.error(`[${SOURCE}] Board ${board.path} failed:`, err.message);
     }
   }
 
-  console.log(`[${SOURCE}] Collected ${results.length} items`);
+  console.log(`[${SOURCE}] Collected ${results.length} items in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
   return results;
 }
 

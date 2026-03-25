@@ -2,26 +2,27 @@ const { fetchHTML, classifyField, cleanText, randomDelay, isTrainingContentValid
 
 const SOURCE = "filmmakersCommunity";
 const BASE_URL = "https://www.filmmakers.co.kr";
-const MAX_PER_BOARD = 15;
+const MAX_PER_BOARD = 5;
 
-// 연습일지/훈련 관련 게시판만 타겟
 const BOARDS = [
   { path: "/actorsForum", label: "배우포럼" },
   { path: "/class", label: "교실/강의" },
   { path: "/class_review", label: "수업후기" },
 ];
 
-async function crawl() {
+async function crawl({ timeBudget = 15000 } = {}) {
   const results = [];
   const seen = new Set();
+  const startTime = Date.now();
 
   for (const board of BOARDS) {
+    if (Date.now() - startTime > timeBudget) break;
+
     try {
       const listUrl = `${BASE_URL}${board.path}`;
       const $ = await fetchHTML(listUrl, { skipCache: true });
 
       const links = [];
-      // Rhymix table-based board skin: links matching /{boardPath}/{document_srl}
       const pattern = new RegExp(`${board.path}/(\\d+)$`);
       $("a").each((i, el) => {
         if (links.length >= MAX_PER_BOARD) return false;
@@ -33,11 +34,11 @@ async function crawl() {
       });
 
       for (const link of links) {
+        if (Date.now() - startTime > timeBudget) break;
         try {
-          await randomDelay(1500, 3000);
+          await randomDelay(300, 600);
           const detail$ = await fetchHTML(link, { skipCache: true });
 
-          // Rhymix detail: .xe_content for body, h1 or JSON-LD for title
           const title = cleanText(
             detail$("h1").first().text()
             || detail$('script[type="application/ld+json"]').text().match(/"headline":"([^"]+)"/)?.[1]
@@ -58,13 +59,13 @@ async function crawl() {
         }
       }
 
-      await randomDelay(2000, 4000);
+      await randomDelay(500, 1000);
     } catch (err) {
       console.error(`[${SOURCE}] Board ${board.path} failed:`, err.message);
     }
   }
 
-  console.log(`[${SOURCE}] Collected ${results.length} items`);
+  console.log(`[${SOURCE}] Collected ${results.length} items in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
   return results;
 }
 

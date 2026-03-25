@@ -47,11 +47,39 @@
     },
     {
       "path": "/api/training-crawl",
-      "schedule": "0 3 * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/training-crawl",
-      "schedule": "0 15 * * *"
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
+      "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/training-crawl?mode=community",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/training-crawl?mode=community",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/training-generate",
+      "schedule": "0 1 * * *"
     },
     {
       "path": "/api/training-generate",
@@ -59,7 +87,27 @@
     },
     {
       "path": "/api/training-generate",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/training-generate",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/training-generate",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/training-generate",
       "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/training-generate",
+      "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/training-generate",
+      "schedule": "0 22 * * *"
     }
   ]
 }
