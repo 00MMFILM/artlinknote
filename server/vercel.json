@@ -1,39 +1,68 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/**/*.js",
-      "use": "@vercel/node"
+  "functions": {
+    "api/ai-analyze.js": {
+      "maxDuration": 60
+    },
+    "api/analyze-video.js": {
+      "maxDuration": 120
+    },
+    "api/transcribe.js": {
+      "maxDuration": 120
     }
-  ],
-  "routes": [
+  },
+  "rewrites": [
     {
-      "src": "/api/crawl-trigger",
-      "dest": "/api/crawl-trigger.js"
+      "source": "/api/crawl-trigger",
+      "destination": "/api/crawl-trigger.js"
     },
     {
-      "src": "/api/crawl-status",
-      "dest": "/api/crawl-status.js"
+      "source": "/api/crawl-status",
+      "destination": "/api/crawl-status.js"
     },
     {
-      "src": "/api/matching-feed",
-      "dest": "/api/matching-feed.js"
+      "source": "/api/matching-feed",
+      "destination": "/api/matching-feed.js"
     },
     {
-      "src": "/api/ai-analyze",
-      "dest": "/api/ai-analyze.js"
+      "source": "/api/ai-analyze",
+      "destination": "/api/ai-analyze.js"
     },
     {
-      "src": "/api/privacy",
-      "dest": "/api/privacy.js"
+      "source": "/api/privacy",
+      "destination": "/api/privacy.js"
     },
     {
-      "src": "/api/training-crawl",
-      "dest": "/api/training-crawl.js"
+      "source": "/api/training-crawl",
+      "destination": "/api/training-crawl.js"
     },
     {
-      "src": "/api/training-generate",
-      "dest": "/api/training-generate.js"
+      "source": "/api/training-generate",
+      "destination": "/api/training-generate.js"
+    },
+    {
+      "source": "/api/analyze-video",
+      "destination": "/api/analyze-video.js"
+    },
+    {
+      "source": "/api/extract-pdf",
+      "destination": "/api/extract-pdf.js"
+    },
+    {
+      "source": "/api/report",
+      "destination": "/api/report.js"
+    },
+    {
+      "source": "/api/transcribe",
+      "destination": "/api/transcribe.js"
+    },
+    {
+      "source": "/api/growth-analysis",
+      "destination": "/api/growth-analysis.js"
+    },
+    {
+      "source": "/api/growth-matching",
+      "destination": "/api/growth-matching.js"
     }
   ],
   "crons": [
@@ -51,7 +80,15 @@
     },
     {
       "path": "/api/training-crawl",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/training-crawl",
@@ -59,7 +96,15 @@
     },
     {
       "path": "/api/training-crawl",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
+      "schedule": "0 14 * * *"
     },
     {
       "path": "/api/training-crawl",
@@ -67,7 +112,15 @@
     },
     {
       "path": "/api/training-crawl",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/training-crawl",
+      "schedule": "0 22 * * *"
     },
     {
       "path": "/api/training-crawl?mode=community",

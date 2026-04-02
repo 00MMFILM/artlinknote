@@ -1,8 +1,136 @@
 // Vercel serverless function: POST /api/ai-analyze
-// Proxies requests to Anthropic API using server-side ANTHROPIC_API_KEY
+// AI-powered note analysis with 7-field few-shot examples + dynamic Supabase examples
+
+const Anthropic = require("@anthropic-ai/sdk");
+const { createClient } = require("@supabase/supabase-js");
+
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Supabase client for dynamic few-shot examples
+const supabase =
+  process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY
+    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+    : null;
+
+// Cache dynamic examples (5 min TTL)
+const exampleCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
+
+async function getDynamicExamples(field) {
+  if (!supabase) return "";
+
+  const cacheKey = field || "general";
+  const cached = exampleCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.value;
+
+  try {
+    const { data, error } = await supabase
+      .from("training_data")
+      .select("note_content, ai_feedback")
+      .eq("field", field || "acting")
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error || !data || data.length === 0) return "";
+
+    // Pick 2 random examples from recent 20 for variety
+    const shuffled = data.sort(() => Math.random() - 0.5);
+    const picked = shuffled.slice(0, 2);
+
+    const examples = picked
+      .map((ex, i) => {
+        const note = ex.note_content.slice(0, 300);
+        const feedback = ex.ai_feedback.slice(0, 800);
+        return `[실제 노트 ${i + 1}]\n${note}...\n\n[피드백 ${i + 1}]\n${feedback}...`;
+      })
+      .join("\n\n---\n\n");
+
+    const result = `\n\n[추가 참고 예시 — 실제 ${cacheKey} 분야 노트와 피드백]\n${examples}`;
+    exampleCache.set(cacheKey, { value: result, ts: Date.now() });
+    return result;
+  } catch {
+    return "";
+  }
+}
+
+const FEW_SHOT_EXAMPLES = {
+  acting: `[좋은 피드백 예시]
+📌 오늘 독백 연습에서 감정의 레이어가 한층 깊어졌어요. 대사 아래 숨겨진 캐릭터의 불안이 자연스럽게 드러나고 있습니다. 특히 중반부에서 감정의 소분류가 '#담담하게'에서 '#울먹이듯'으로 전환되는 순간이 인상적이에요.
+
+💪 "그건 내 잘못이 아니야"를 말할 때 목소리가 미세하게 떨리면서도 눈빛은 단호한 점이 훌륭해요. 이 모순이 캐릭터의 내면 갈등을 압축적으로 보여줍니다. 골반 중심축이 안정된 상태에서 상체만으로 감정을 표현하는 절제력이 느껴져요. 마이즈너의 '반복 연습(Repetition Exercise)'에서 추구하는 충동적 진실성이 잘 드러나고 있어요.
+
+🎯 세 번째 비트 전환에서 감정이 급격히 바뀌는데, 호흡으로 브릿지를 만들어보세요. 들숨에서 감정을 전환하면 관객도 함께 전환할 시간을 얻어요. 현재 전환이 '#격앙된'에서 바로 '#속삭이듯'으로 넘어가는데, 그 사이에 '#떨리는' 단계를 거치면 감정 곡선이 더 유기적이 됩니다. 프로소디 관점에서 이 전환 지점의 피치를 의도적으로 낮추고(pitch down), 속도를 0.7배로 감속하면서 0.5초 쉼을 넣어보세요.
+
+🎭 스타니슬랍스키의 '마법의 만약에'를 적용해보면 — 만약 이 대사가 마지막이라면 어떤 무게감이 실릴까요? 서브텍스트 작업에 도움이 됩니다. 현재 캐릭터의 음성 시그니처가 중저음 음역대에 빠른 리듬인데, 같은 대사를 고음역+느린 리듬으로 전달했을 때의 차이를 실험해보세요. 우타 하겐의 '전이(Transference)' 기법도 추천해요. 실제 자신의 기억에서 유사한 감정을 끌어와 캐릭터에 입히는 방식이에요.
+
+🎨 이 독백의 감정 구조는 봉준호 감독의 '기생충'에서 기택(송강호)이 지하실에서 올라오는 장면과 닮아 있어요. 억눌린 감정이 신체를 통해 서서히 스며나오는 방식을 참고해보세요.
+
+💡 무용의 라반 분석에서 '무게(Weight)' 개념을 빌려오면 재미있어요. 대사마다 무게감을 다르게 싣는 연습을 해보세요. 척추의 각 마디를 의식하면서 감정이 어디에서 시작되는지 탐색하면 신체적 표현의 폭이 넓어집니다.
+
+📈 지난번 대비 비트 전환이 더 유기적이에요. 특히 감정 곡선의 정점에서 '쉼'을 가져가는 용기가 생긴 게 보여요. 이전에는 감정 대분류(기쁨→슬픔) 수준의 전환이었다면, 이제는 소분류(#담담하게→#울먹이듯→#격앙된) 수준의 미세한 그라데이션이 나타나고 있어요. 음성 톤도 이전의 단조로운 리듬에서 벗어나 프로소디의 변화폭이 넓어졌어요 — 쉼 타이밍, 피치 변동, 속도 완급이 더 자유로워졌습니다.
+
+🔜 같은 독백을 앉아서 → 서서 → 걸으면서 3번 해보세요. 신체 상태에 따라 골반-척추-어깨의 정렬이 바뀌면서 감정이 어떻게 달라지는지 관찰하면 새로운 층위를 발견할 수 있어요.`,
+
+  music: `[좋은 피드백 예시]
+📌 스케일 연습의 정확도가 높아지고 있고, 특히 하행 시 레가토 연결이 자연스러워졌어요.
+💪 16분음표 패시지에서 왼손의 독립성이 좋아요. 세 번째 마디의 크로스오버가 매끄럽고 음량도 균일해요. 보컬이라면 이 구간에서 흉성(chest voice)의 안정감이 돋보이고, 음역 전환 시 믹스보이스(mixed voice)로의 브릿지가 자연스러워요.
+🎯 포르테에서 피아니시모로 전환할 때 2-3박 정도 크레셴도 브릿지를 넣어보세요. 급격한 다이내믹 변화보다 컨트롤된 전환이 음악적이에요. 보컬의 경우 벨팅(belting)에서 브레시(breathy) 톤으로 전환할 때 0.5박 정도 가성(falsetto)을 경유하면 감정적 낙차가 더 아름다워요.
+🎭 이 구간의 핑거링을 4-2-1-3 대신 3-1-2-4로 바꿔보면 손목 회전이 줄어서 빠른 템포에서도 안정적이에요. 프로소디 관점에서 프레이즈의 강세 위치(1-3박 vs 2-4박)를 바꿔보면 같은 멜로디도 전혀 다른 감정을 전달해요.
+💡 이 리듬 패턴은 재즈의 스윙 필과 연결돼요. 8분음표를 약간 불균등하게 연주하면 클래식에서도 생동감이 살아나요. 비브라토의 깊이와 속도를 프레이즈마다 의도적으로 다르게 가져가보세요 — 긴장 구간은 빠르고 좁은 비브라토, 이완 구간은 느리고 넓은 비브라토.
+📈 지난주 대비 BPM이 ♩=120에서 ♩=140까지 안정적으로 올라왔어요.
+🔜 메트로놈 없이 같은 곡을 루바토로 한 번 연주해보세요. 내면의 템포 감각이 어떤지 확인할 수 있어요.`,
+
+  art: `[좋은 피드백 예시]
+📌 오늘 수채화 작업에서 물의 양 조절이 섬세해졌어요. 웨트 온 웨트 기법의 번짐이 의도적으로 느껴집니다.
+💪 전경의 따뜻한 색과 배경의 차가운 색 대비가 효과적이에요. 색온도만으로 공간감을 만드는 좋은 시도입니다. 이 작품은 전체적으로 '부드러운(gentle)' 감정 톤을 가지고 있어요.
+🎯 하늘 영역의 그라데이션에서 경계가 살짝 보이는데, 붓에 물을 더 머금고 한 번에 넓게 칠하면 자연스러운 전환이 됩니다. 색채의 전환도 음성의 프로소디처럼 — 급격한 변화(staccato)보다 점진적 변화(legato)가 이 작품의 분위기에 더 맞아요.
+🎭 명도 5단계 스케일로 보면, 현재 작품은 3-5 범위에 집중되어 있어요. 1-2 영역(아주 어두운)을 추가하면 작품이 '속삭이다가 외치는' 감정적 드라마가 생겨요. 여백의 크기가 곧 '쉼(pause)'이에요 — 현재 여백이 너무 균일한데, 의도적으로 크고 작은 여백을 배치하면 시각적 리듬감이 살아나요.
+💡 사진의 '아웃포커싱' 원리를 회화에 적용해보면 흥미로워요. 주제부만 디테일하게, 나머지는 의도적으로 흐리게 처리하면 시선이 집중돼요.
+📈 지난 작품 대비 구도 의식이 확실히 발전했어요. 주제를 중앙에서 벗어나 3분할 지점에 놓는 시도가 좋아요.
+🔜 같은 장면을 10분 크로키 → 30분 스케치 → 1시간 완성 순으로 3장 그려보세요. 시간 제한이 주는 과감함을 경험해보세요.`,
+
+  dance: `[좋은 피드백 예시]
+📌 플로어 시퀀스에서 무게 이동이 유기적이에요. 바닥과의 관계가 단순한 지지를 넘어 대화처럼 느껴집니다. 동작 분류상 '플로어워크 → 릴리즈 → 스파이럴'의 흐름이 자연스러워요.
+
+💪 스파이럴 동작에서 코어 안정성이 뛰어나요. 회전 중에도 골반-척추 중심축이 흔들리지 않아서 끝 동작이 깔끔해요. 스켈레톤 키포인트로 보면 회전 시 어깨-골반의 대각선 정렬(contrapost)이 일관되게 유지되고 있어요. 이건 중급 이상의 숙련도를 보여주는 지표입니다.
+
+🎯 점프 착지 후 다음 동작으로의 전환이 약간 끊기는데, 착지 순간 플리에(plie)를 더 깊게 가져가면 운동에너지가 자연스럽게 이어져요. 무게중심 궤적이 수직 하강 후 바로 정지하는 패턴인데, 착지에서 수평 이동으로 연결하는 트랜지션을 의식해보세요.
+
+🎭 라반 분석의 에포트(Effort) 체계로 보면 현재 움직임이 주로 '직접적(Direct)+강한(Strong)+빠른(Quick)' 조합에 집중되어 있어요. '간접적(Indirect)+가벼운(Light)+느린(Sustained)' 조합을 섞으면 대비 효과가 커져요. 공간 조화(Space Harmony) 관점에서도 카인스피어(Kinesphere)의 중간 영역을 더 활용하면 동작의 다이내믹 레인지가 넓어집니다.
+
+🎨 피나 바우쉬의 탄츠테아터에서 일상적 제스처가 무용으로 변환되는 과정을 참고해보세요. 당신의 플로어 시퀀스에서 보이는 '눕기→일어서기' 패턴이 그녀의 Cafe Muller(1978)에서의 반복적 쓰러짐과 공명합니다.
+
+💡 음악의 감정 태그와 동작을 더 정밀하게 매핑해보세요 — 음악이 '속삭이듯(whisper)' 흐를 때는 동작도 작고 가까운 키네스피어에서, '폭발적(excited)' 구간에서는 최대 키네스피어로 확장. 호흡의 들숨=동작 준비(수축), 날숨=동작 실행(확장)을 의식하면 움직임에 유기적 리듬이 생겨요. 무술의 '기' 개념처럼 동작 시작 전 0.5초의 '준비 에너지'가 관객의 주목을 끌어요.
+
+📈 이전 대비 공간 활용이 넓어졌어요. 대각선 이동이 추가되면서 안무의 입체감이 살아났어요. 동작 레벨(고/중/저)의 변화도 다양해졌고, 특히 플로어에서 스탠딩으로의 전환 속도가 빨라진 게 체력과 테크닉 모두 향상되었음을 보여줘요.
+
+🔜 오늘 시퀀스를 음악 없이 호흡만으로 한 번 해보세요. 8카운트를 내 호흡 주기에 맞춰 재해석하면 내 몸의 자연스러운 리듬을 발견할 수 있어요. 그 다음 원래 음악으로 돌아오면 싱크의 질이 달라집니다.`,
+
+  film: `[좋은 피드백 예시]
+📌 숏 리스트의 앵글 변화가 서사를 잘 지원하고 있어요. 특히 대화 씬에서 오버더숄더와 클로즈업의 교차가 긴장감을 만들어요.
+💪 자연광만으로 조명 설계를 한 점이 인상적이에요. 창문을 키라이트로 활용하면서 그림자가 캐릭터의 심리를 반영해요.
+🎯 편집에서 컷 타이밍을 대사가 끝나기 0.5초 전으로 당겨보세요. 대화의 템포가 빨라지면서 자연스러운 리듬감이 생겨요. 배우의 대사 톤이 '단호함(firm)'에서 '떨림(trembling)'으로 바뀌는 순간에 맞춰 숏 사이즈를 MS에서 CU로 전환하면 감정 전달이 배가돼요.
+🎭 180도 규칙을 한 번 의도적으로 깨보는 것도 시도해보세요. 캐릭터의 심리적 혼란을 시각적으로 표현할 수 있어요. 각 캐릭터의 음성 시그니처(A는 저음+느린리듬, B는 고음+빠른리듬)에 맞는 카메라 무빙을 대응시키면 시청각 일체감이 생겨요.
+💡 사운드 디자인에서 앰비언스(배경음)가 없는 순간을 만들어보세요. 순간적 정적(silence)이 관객의 긴장감을 극대화해요. 대사의 감정 클라이맥스 직전에 배경음을 완전히 빼면, 이어지는 대사의 감정적 무게가 3배 이상 증폭됩니다.
+📈 지난 촬영 대비 카메라 움직임이 안정적이에요. 핸드헬드의 떨림이 의도적으로 느껴지기 시작했어요.
+🔜 같은 씬을 3가지 앵글(와이드/미디엄/클로즈업)로 촬영해서 편집 선택지를 늘려보세요.`,
+
+  literature: `[좋은 피드백 예시]
+📌 단편의 도입부가 강렬해요. 첫 문장이 독자의 궁금증을 즉시 자극하면서 세계관을 암시하고 있어요.
+💪 대화체에서 각 인물의 어투가 확실히 구분돼요. 특히 노인 캐릭터의 짧은 문장들이 그 세대의 말투를 잘 살렸어요. 각 캐릭터의 '음성 시그니처'가 명확해요 — A는 긴 문장+우회적 표현(gentle 톤), B는 짧은 문장+직설적 표현(firm 톤)으로 대사만 읽어도 누구인지 구분됩니다.
+🎯 3장에서 시점 전환이 갑작스러운데, 물리적 공간 이동을 먼저 묘사하면 독자가 자연스럽게 따라가요. "그녀가 방을 나섰을 때" 같은 브릿지 문장을 넣어보세요. 서술 속도(프로소디)도 이 전환에서 잠시 감속해주세요 — 짧은 묘사 문장 2-3개로 '쉼'을 만들면 독자가 시점 전환을 자연스럽게 수용해요.
+🎭 현재 서술이 '보여주기(showing)'보다 '말하기(telling)'에 치우쳐 있어요. "그는 화가 났다" 대신 "주먹이 하얗게 질렸다"처럼 행동으로 보여주세요. 문장의 리듬도 감정과 동기화하세요 — 긴장 장면에서는 짧고 끊기는 문장(staccato), 이완 장면에서는 길고 흐르는 문장(legato)으로 문체 자체가 감정을 전달하게 하세요.
+💡 시나리오 기법의 '비트 시트'를 소설에 적용해보면 재미있어요. 각 장면을 한 줄로 요약하고, 감정 곡선을 시각화해보세요.
+📈 이전 작품 대비 문장 호흡이 다양해졌어요. 긴 문장과 짧은 문장의 리듬이 장면 분위기와 맞아요.
+🔜 오늘 쓴 장면을 다른 인물의 시점에서 다시 써보세요. 같은 사건이 시점에 따라 얼마나 다르게 보이는지 경험해보세요.`,
+
+  general: `[좋은 피드백 예시]
+📌 기록의 구체성이 좋아요. 날짜, 장소, 참여자까지 명시해서 나중에 돌아봤을 때 상황이 선명하게 떠오를 거예요.
+💪 자기 관찰이 솔직하고 구체적이에요. 잘한 점과 부족한 점을 균형 있게 기록하는 게 성장의 핵심이에요.
+🎯 목표를 더 구체적으로 설정해보세요. "잘하고 싶다" 대신 "오늘은 이 부분에서 3번 이상 성공하기"처럼 측정 가능한 목표가 효과적이에요.`,
+};
 
 module.exports = async function handler(req, res) {
-  // CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -15,52 +143,119 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { systemPrompt, userMessage } = req.body || {};
-
-  if (!systemPrompt || !userMessage) {
-    return res.status(400).json({ error: "systemPrompt and userMessage are required" });
-  }
-
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: "Server API key not configured" });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(500).json({ error: "API key not configured" });
   }
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
-      }),
+    const { prompt, field, noteTitle, frames } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ error: "prompt is required" });
+    }
+
+    const fewShot = FEW_SHOT_EXAMPLES[field] || FEW_SHOT_EXAMPLES.general;
+    const dynamicExamples = await getDynamicExamples(field);
+
+    const hasImages = frames && Array.isArray(frames) && frames.length > 0;
+
+    const systemPrompt = `당신은 20년 경력의 예술 전문 마스터 코치입니다. 한국예술종합학교, 국립극단, 주요 영화제에서 활동한 현역 전문가이며, ArtLink 앱에서 아티스트의 연습 노트를 분석하여 전문적이고 실질적인 코칭을 제공합니다.
+
+당신의 코칭 철학:
+- 아티스트의 기록 속에서 본인도 미처 인식하지 못한 패턴과 가능성을 읽어내는 것
+- 학술적 이론과 현장 경험을 결합한 실용적 조언
+- 각 아티스트의 고유한 예술적 정체성을 존중하면서 성장 방향을 제시
+
+절대 규칙 (하나라도 어기면 실패):
+- 반드시 한국어로 답변하세요
+- 주어진 노트 내용을 기반으로 반드시 즉시 피드백을 제공하세요. 📌 이모지로 시작하세요
+- 절대로 "죄송", "죄송합니다", "죄송하지만", "sorry" 등 사과/변명으로 시작하지 마세요. 첫 문장부터 바로 분석 내용을 시작하세요
+- 절대로 "정보가 부족합니다", "더 알려주세요", "구체적 자료가 필요합니다", "데이터가 없습니다" 같은 말을 하지 마세요
+- 절대로 "전사 내용이 무관합니다", "오디오 전사 내용이 ... 텍스트입니다" 같은 메타 코멘트를 하지 마세요. 입력 데이터 품질에 대해 언급하지 마세요
+- 절대로 사용자에게 추가 정보를 요청하거나 질문하지 마세요. "다음에는 이렇게 기록해주세요" 같은 요청도 금지입니다
+- 절대로 마크다운 문법을 사용하지 마세요. **볼드**, ##헤딩, -목록, ---구분선 전부 금지. 이모지 섹션 구분과 일반 텍스트만 사용하세요
+- 절대로 "피드백 가능한 노트 유형", "예를 들어" 같은 안내/가이드를 제공하지 마세요. 당신은 코치이지 사용 설명서가 아닙니다
+- 노트가 짧거나, 오디오 전사가 부정확하거나, 정보가 적어도 반드시 곡명/아티스트/분야를 기반으로 전문적 분석을 제공하세요. 거부하지 마세요
+- 첨부 오디오 전사 내용이 음악의 가사가 아닌 노이즈/무관한 텍스트인 경우, 전사 내용을 완전히 무시하고 노트 제목과 내용만으로 분석하세요. 이 사실을 사용자에게 알리지 마세요
+- 피드백은 반드시 1500-2000자 이상이어야 합니다. 각 섹션에서 2-4문장으로 깊이 있게 분석하세요
+- 사용자의 롤모델, 관심 분야, 경력 정보가 있으면 이를 피드백에 적극 연결하세요
+- 전문 용어를 사용할 때는 괄호 안에 쉬운 설명을 덧붙이세요
+- 요청된 형식(📌💪🎯🎭🎨💡📈🔜)을 반드시 따르되, 각 섹션 사이에 빈 줄을 넣어 가독성을 높이세요
+- 피드백 맨 마지막에 반드시 다음 형식의 성장 점수를 추가하세요 (사용자에게는 보이지 않는 내부 데이터입니다):
+[SCORES]{"technique":N,"expression":N,"creativity":N,"consistency":N,"growth":N}[/SCORES]
+각 항목은 1~10 정수. technique=기술력, expression=표현력, creativity=창의성, consistency=꾸준함, growth=성장속도. 노트 내용을 기반으로 객관적으로 평가하세요
+${hasImages ? "- 첨부된 이미지를 반드시 시각적으로 분석하세요. 구도, 색채, 기법, 표현력 등을 구체적으로 언급하세요" : ""}
+
+${fewShot}${dynamicExamples}`;
+
+    // Build user content: interleave images if present, then text prompt
+    let userContent;
+    if (hasImages) {
+      userContent = [];
+      frames.forEach((base64, idx) => {
+        userContent.push({
+          type: "text",
+          text: `[첨부 이미지 ${idx + 1}/${frames.length}]`,
+        });
+        userContent.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: "image/jpeg",
+            data: base64,
+          },
+        });
+      });
+      userContent.push({ type: "text", text: prompt });
+    } else {
+      userContent = prompt;
+    }
+
+    const msg = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 4096,
+      temperature: 1,
+      system: systemPrompt,
+      messages: [
+        { role: "user", content: userContent },
+        { role: "assistant", content: "📌" },
+      ],
     });
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error(`Anthropic API error ${response.status}:`, errorBody);
-      return res.status(502).json({ error: "AI service error" });
+    // Prepend the prefill to the response and strip any markdown
+    const rawText = msg.content[0]?.text || "";
+    let analysis = ("📌" + rawText)
+      .replace(/\*\*/g, "")
+      .replace(/^#{1,3}\s/gm, "")
+      .replace(/^---+$/gm, "")
+      .replace(/^- /gm, "");
+
+    // Strip any apologetic/meta preamble before the actual analysis
+    // e.g. "📌 죄송하지만 ... 텍스트입니다. 전사 내용을 무시하고 ... 드리겠습니다.\n\n💪 ..."
+    // → keep from the second emoji section onward
+    const apologyPattern = /^📌[^💪🎯🎭🎨💡📈🔜]*?(죄송|전사 내용[이을]|무관한 텍스트|오디오 전사)[^💪🎯🎭🎨💡📈🔜]*?(?=\n\n?[💪🎯🎭🎨💡📈🔜📌])/s;
+    if (apologyPattern.test(analysis)) {
+      analysis = analysis.replace(apologyPattern, "📌").replace(/^📌\s*\n+/, "📌 ").trim();
     }
 
-    const data = await response.json();
-    const result =
-      data.content && data.content[0] && data.content[0].text
-        ? data.content[0].text
-        : "";
-
-    if (!result) {
-      return res.status(502).json({ error: "Empty AI response" });
+    // Extract growth scores from response
+    let scores = null;
+    const scoresMatch = analysis.match(/\[SCORES\](.*?)\[\/SCORES\]/s);
+    if (scoresMatch) {
+      try {
+        scores = JSON.parse(scoresMatch[1]);
+      } catch {}
+      // Remove scores tag from visible feedback
+      analysis = analysis.replace(/\s*\[SCORES\].*?\[\/SCORES\]\s*/s, "").trim();
     }
 
-    return res.status(200).json({ result });
-  } catch (err) {
-    console.error("AI analyze error:", err.message);
-    return res.status(500).json({ error: "Internal server error" });
+    if (!analysis || analysis.trim().length < 10) {
+      return res.status(500).json({ error: "Empty response from AI" });
+    }
+
+    return res.status(200).json({ analysis, scores });
+  } catch (error) {
+    console.error("[ai-analyze] Error:", error.message, error.status, error.body);
+    return res.status(500).json({ error: "AI analysis failed", detail: error.message });
   }
 };

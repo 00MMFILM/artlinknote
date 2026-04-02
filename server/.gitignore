@@ -1,2 +1,5 @@
 .vercel
 .env*.local
+.env.prod
+.env.prod-check
+node_modules/
