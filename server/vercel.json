@@ -63,6 +63,10 @@
     {
       "source": "/api/growth-matching",
       "destination": "/api/growth-matching.js"
+    },
+    {
+      "source": "/api/auth-callback",
+      "destination": "/api/auth-callback.js"
     }
   ],
   "crons": [
