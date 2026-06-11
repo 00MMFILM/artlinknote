@@ -1,7 +1,9 @@
 // GOAL: Artist profile analytics, related notes, and series detection.
-// Pure Swift, no external dependencies. Operates on [Note] and UserProfile.
+// Plus anonymous MAU tracking (device-id based, throttled to once per day).
+// Operates on [Note] and UserProfile.
 
 import Foundation
+import UIKit
 
 // MARK: - ArtistProfile Result
 struct ArtistProfile {
@@ -232,4 +234,53 @@ func getNoteSeries(allNotes: [Note]) -> [String: [Note]] {
     }
 
     return seriesMap
+}
+
+// MARK: - MAU Tracking
+
+private let mauThrottleKey = "lastMAUTrackDate"
+
+/// Anonymous device-level MAU ping. Safe to call on every launch — throttled
+/// to once per day per device. Best-effort: failures are silent.
+@MainActor
+func trackMAU(userType: String = "anonymous") async {
+    let calendar = Calendar.current
+    let today = calendar.startOfDay(for: Date())
+    let defaults = UserDefaults.standard
+    if let last = defaults.object(forKey: mauThrottleKey) as? Date,
+       calendar.isDate(last, inSameDayAs: today) {
+        return
+    }
+
+    guard let deviceId = UIDevice.current.identifierForVendor?.uuidString else {
+        return
+    }
+    let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
+    let language = Locale.current.language.languageCode?.identifier ?? "en"
+
+    let body: [String: Any] = [
+        "deviceId": deviceId,
+        "language": language,
+        "userType": userType,
+        "platform": "ios",
+        "appVersion": appVersion
+    ]
+
+    guard let url = URL(string: "\(AIConfig.serverURL)/api/track-mau"),
+          let payload = try? JSONSerialization.data(withJSONObject: body) else {
+        return
+    }
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 10
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = payload
+
+    do {
+        _ = try await URLSession.shared.data(for: request)
+        defaults.set(today, forKey: mauThrottleKey)
+    } catch {
+        // Best-effort analytics — never surface failures to the user.
+    }
 }

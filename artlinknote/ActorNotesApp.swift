@@ -19,6 +19,7 @@ struct ArtlinkApp: App {
                     // Skip optional/slow startup work during UI tests to avoid watchdog kills.
                     if !isUITesting {
                         await store.load()
+                        await trackMAU()
                     }
                 }
         }
