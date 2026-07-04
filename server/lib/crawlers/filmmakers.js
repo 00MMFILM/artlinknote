@@ -7,6 +7,7 @@ const MAX_ITEMS = 20;
 
 async function crawl() {
   const $ = await fetchHTML(LIST_URL);
+  if (!$) return [];
   const items = [];
 
   // Modern div-based layout: each post is an <a> linking to /actorCasting/{id}
@@ -80,6 +81,7 @@ async function crawl() {
   for (const item of unique) {
     try {
       const detail$ = await fetchHTML(item.source_url);
+        if (!detail$) continue;
       const bodyText = cleanText(detail$(".xe_content").first().text());
       if (bodyText) {
         item.description = bodyText.slice(0, 2000);

@@ -7,6 +7,7 @@ const MAX_ITEMS = 20;
 
 async function crawl() {
   const $ = await fetchHTML(LIST_URL);
+  if (!$) return [];
   const items = [];
 
   // plfil uses React — try to extract from __NEXT_DATA__ or embedded JSON
@@ -69,6 +70,7 @@ async function crawl() {
     }
     try {
       const detail$ = await fetchHTML(item.source_url);
+        if (!detail$) continue;
 
       // Try __NEXT_DATA__ on detail page
       const detailScript = detail$("script#__NEXT_DATA__").html();

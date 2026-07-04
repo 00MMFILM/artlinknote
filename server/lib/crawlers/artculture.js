@@ -7,6 +7,7 @@ const MAX_ITEMS = 20;
 
 async function crawl() {
   const $ = await fetchHTML(LIST_URL);
+  if (!$) return [];
   const items = [];
   const seen = new Set();
 
@@ -42,6 +43,7 @@ async function crawl() {
   for (const item of items.slice(0, MAX_ITEMS)) {
     try {
       const detail$ = await fetchHTML(item.source_url);
+        if (!detail$) continue;
       const bodyText = cleanText(
         detail$("article, .entry-content, .post-content, .contest-content, .magazine-content, .content").first().text()
       );

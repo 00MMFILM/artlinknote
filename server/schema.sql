@@ -56,3 +56,31 @@ CREATE INDEX IF NOT EXISTS idx_raw_training_unprocessed
 
 ALTER TABLE raw_training_content ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "service_key_full_access" ON raw_training_content FOR ALL USING (true);
+
+-- AI feedback training data (generated from raw_training_content)
+CREATE TABLE IF NOT EXISTS training_data (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  field TEXT NOT NULL,
+  note_content TEXT NOT NULL,
+  ai_feedback TEXT NOT NULL,
+  content_hash VARCHAR(32) UNIQUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_training_data_field ON training_data(field);
+
+ALTER TABLE training_data ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_key_full_access_td" ON training_data FOR ALL USING (true);
+
+-- User feedback reports (ai_feedback thumbs up/down, bug reports)
+CREATE TABLE IF NOT EXISTS reports (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  type TEXT NOT NULL DEFAULT 'unknown',
+  payload JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_reports_type ON reports(type);
+
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_key_full_access_reports" ON reports FOR ALL USING (true);

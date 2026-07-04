@@ -7,6 +7,7 @@ const MAX_ITEMS = 20;
 
 async function crawl() {
   const $ = await fetchHTML(LIST_URL);
+  if (!$) return [];
   const items = [];
 
   // artnuri uses ul.card > li structure

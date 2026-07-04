@@ -29,6 +29,8 @@ async function crawl({ fields, timeBudget = 15000 } = {}) {
         const searchUrl = `https://brunch.co.kr/search?q=${encodeURIComponent(query)}`;
         const $ = await fetchHTML(searchUrl, { skipCache: true });
 
+        if (!$) continue;
+
         const links = [];
         $("a[href*='/@']").each((i, el) => {
           if (links.length >= MAX_PER_QUERY) return false;
@@ -45,6 +47,7 @@ async function crawl({ fields, timeBudget = 15000 } = {}) {
           try {
             await randomDelay(300, 600);
             const detail$ = await fetchHTML(link, { skipCache: true });
+        if (!detail$) continue;
 
             const title = cleanText(detail$("h1.cover_title, .wrap_title h1, meta[property='og:title']").first().text()
               || detail$("meta[property='og:title']").attr("content"));

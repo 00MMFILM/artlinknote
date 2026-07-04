@@ -1,6 +1,8 @@
 {
   "version": 2,
-  "regions": ["icn1"],
+  "regions": [
+    "icn1"
+  ],
   "functions": {
     "api/ai-analyze.js": {
       "maxDuration": 60
@@ -25,10 +27,6 @@
     {
       "source": "/api/crawl-trigger",
       "destination": "/api/crawl-trigger.js"
-    },
-    {
-      "source": "/api/probe",
-      "destination": "/api/probe.js"
     },
     {
       "source": "/api/crawl-status",

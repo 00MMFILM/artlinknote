@@ -3,6 +3,7 @@
 
 const Anthropic = require("@anthropic-ai/sdk");
 const { createClient } = require("@supabase/supabase-js");
+const crypto = require("crypto");
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -39,8 +40,8 @@ async function getDynamicExamples(field) {
 
     const examples = picked
       .map((ex, i) => {
-        const note = ex.note_content.slice(0, 300);
-        const feedback = ex.ai_feedback.slice(0, 800);
+        const note = (ex.note_content || "").slice(0, 300);
+        const feedback = (ex.ai_feedback || "").slice(0, 800);
         return `[실제 노트 ${i + 1}]\n${note}...\n\n[피드백 ${i + 1}]\n${feedback}...`;
       })
       .join("\n\n---\n\n");
@@ -130,10 +131,12 @@ const FEW_SHOT_EXAMPLES = {
 🎯 목표를 더 구체적으로 설정해보세요. "잘하고 싶다" 대신 "오늘은 이 부분에서 3번 이상 성공하기"처럼 측정 가능한 목표가 효과적이에요.`,
 };
 
+const { applySecurityChecks } = require("../lib/security");
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-App-Token");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -143,8 +146,11 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  // 보안: Rate limit (분당 10회) + App token
+  if (applySecurityChecks(req, res, { maxRequests: 10 })) return;
+
   if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: "API key not configured" });
+    return res.status(500).json({ error: "Server configuration error" });
   }
 
   try {
@@ -158,6 +164,23 @@ module.exports = async function handler(req, res) {
     const dynamicExamples = await getDynamicExamples(field);
 
     const hasImages = frames && Array.isArray(frames) && frames.length > 0;
+
+    // 이미지 페이로드 제한 — DoS 및 과금 폭탄 방지
+    if (hasImages) {
+      if (frames.length > 5) {
+        return res.status(400).json({ error: "Maximum 5 images allowed" });
+      }
+      for (const frame of frames) {
+        if (typeof frame !== "string" || frame.length > 2 * 1024 * 1024) {
+          return res.status(400).json({ error: "Each image must be under 2MB" });
+        }
+      }
+    }
+
+    // 프롬프트 길이 제한
+    if (prompt.length > 10000) {
+      return res.status(400).json({ error: "Prompt too long (max 10000 chars)" });
+    }
 
     const systemPrompt = `당신은 20년 경력의 예술 전문 마스터 코치입니다. 한국예술종합학교, 국립극단, 주요 영화제에서 활동한 현역 전문가이며, ArtLink 앱에서 아티스트의 연습 노트를 분석하여 전문적이고 실질적인 코칭을 제공합니다.
 
@@ -253,9 +276,25 @@ ${fewShot}${dynamicExamples}`;
       return res.status(500).json({ error: "Empty response from AI" });
     }
 
+    // 모든 AI 분석 결과를 training_data에 자동 저장 (영상/이미지는 텍스트만)
+    if (supabase && prompt) {
+      try {
+        const noteContent = prompt.slice(0, 5000);
+        const contentHash = crypto.createHash("sha256").update(noteContent).digest("hex").slice(0, 32);
+        await supabase.from("training_data").upsert({
+          field: field || "general",
+          note_content: noteContent,
+          ai_feedback: analysis.slice(0, 8000),
+          content_hash: contentHash,
+        }, { onConflict: "content_hash" });
+      } catch (e) {
+        console.error("[ai-analyze] training_data save error:", e.message);
+      }
+    }
+
     return res.status(200).json({ analysis, scores });
   } catch (error) {
-    console.error("[ai-analyze] Error:", error.message, error.status, error.body);
-    return res.status(500).json({ error: "AI analysis failed", detail: error.message });
+    console.error("[ai-analyze] Error:", error.message, error.status);
+    return res.status(500).json({ error: "AI analysis failed" });
   }
 };

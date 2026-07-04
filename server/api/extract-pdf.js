@@ -2,6 +2,7 @@
 // PDF text extraction using pdf-parse
 
 const pdfParse = require("pdf-parse");
+const { applySecurityChecks } = require("../lib/security");
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -9,7 +10,7 @@ module.exports = async function handler(req, res) {
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-App-Token");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -18,6 +19,9 @@ module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
+
+  // 보안: Rate limit (분당 10회 — 파일 처리 비용) + App token
+  if (applySecurityChecks(req, res, { maxRequests: 10 })) return;
 
   try {
     const contentType = req.headers["content-type"] || "";

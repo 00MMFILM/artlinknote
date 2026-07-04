@@ -7,6 +7,7 @@ const MAX_ITEMS = 15;
 
 async function crawl() {
   const $ = await fetchHTML(LIST_URL);
+  if (!$) return [];
   const items = [];
 
   // KOFIC uses table.bbs_ltype with a[onclick="fn_goDetailPage('ID')"] inside rows
@@ -56,6 +57,7 @@ async function crawl() {
   for (const item of items) {
     try {
       const detail$ = await fetchHTML(item.source_url);
+        if (!detail$) continue;
       const bodyText = cleanText(
         detail$(".bbs_vtype, .view_content, .board_view, article, #content").first().text()
       );

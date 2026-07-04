@@ -23,6 +23,8 @@ async function crawl({ timeBudget = 15000 } = {}) {
       const listUrl = `${BASE_URL}${board.path}`;
       const $ = await fetchHTML(listUrl, { skipCache: true });
 
+      if (!$) continue;
+
       const links = [];
       $("a.text-dark, a.link-secondary").each((i, el) => {
         if (links.length >= MAX_PER_BOARD) return false;
@@ -39,6 +41,7 @@ async function crawl({ timeBudget = 15000 } = {}) {
         try {
           await randomDelay(300, 600);
           const detail$ = await fetchHTML(link, { skipCache: true });
+        if (!detail$) continue;
 
           const title = cleanText(
             detail$("blockquote h4, h4.bo_v_tit, #bo_v_title").first().text()

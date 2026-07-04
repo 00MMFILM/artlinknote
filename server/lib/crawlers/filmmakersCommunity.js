@@ -22,6 +22,8 @@ async function crawl({ timeBudget = 15000 } = {}) {
       const listUrl = `${BASE_URL}${board.path}`;
       const $ = await fetchHTML(listUrl, { skipCache: true });
 
+      if (!$) continue;
+
       const links = [];
       const pattern = new RegExp(`${board.path}/(\\d+)$`);
       $("a").each((i, el) => {
@@ -38,6 +40,7 @@ async function crawl({ timeBudget = 15000 } = {}) {
         try {
           await randomDelay(300, 600);
           const detail$ = await fetchHTML(link, { skipCache: true });
+        if (!detail$) continue;
 
           const title = cleanText(
             detail$("h1").first().text()

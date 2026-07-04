@@ -7,6 +7,7 @@ const MAX_ITEMS = 15;
 
 async function crawl() {
   const $ = await fetchHTML(LIST_URL);
+  if (!$) return [];
   const items = [];
 
   // artmore.kr uses table rows with links to search_view.do?rec_idx=ID
@@ -80,6 +81,7 @@ async function crawl() {
   for (const item of unique) {
     try {
       const detail$ = await fetchHTML(item.source_url);
+        if (!detail$) continue;
       const bodyText = cleanText(
         detail$(".view_content, .recruit-view, article, .content, .board_view, #content").first().text()
       );

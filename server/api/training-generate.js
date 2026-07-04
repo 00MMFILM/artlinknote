@@ -1,8 +1,8 @@
 const { supabase } = require("../lib/supabase");
 const crypto = require("crypto");
 
-const BATCH_SIZE = 30;
-const CONCURRENCY = 3;
+const BATCH_SIZE = 50;
+const CONCURRENCY = 5;
 
 const FIELD_LABELS = {
   acting: "연기",
@@ -69,14 +69,15 @@ module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST" && req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
-  // Auth
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = req.headers["authorization"] || "";
-    const vercelCron = req.headers["x-vercel-cron-secret"] || "";
-    if (authHeader !== `Bearer ${cronSecret}` && vercelCron !== cronSecret) {
-      return res.status(401).json({ error: "Unauthorized" });
+  // Auth — timing-safe 크론 인증
+  const { verifyCronAuth } = require("../lib/security");
+  const auth = verifyCronAuth(req);
+  if (!auth.ok) {
+    if (auth.reason === "CRON_SECRET not configured") {
+      console.error("[training-generate] CRON_SECRET not configured");
+      return res.status(500).json({ error: "Server configuration error" });
     }
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   if (!supabase) {
@@ -92,7 +93,8 @@ module.exports = async function handler(req, res) {
     .limit(BATCH_SIZE);
 
   if (fetchError) {
-    return res.status(500).json({ error: "DB fetch error", detail: fetchError.message });
+    console.error("[training-generate] DB fetch error:", fetchError.message);
+    return res.status(500).json({ error: "DB fetch error" });
   }
 
   if (!rawItems || rawItems.length === 0) {
@@ -111,19 +113,22 @@ module.exports = async function handler(req, res) {
 
       const noteContent = item.content.slice(0, 5000);
       const contentHash = crypto.createHash("sha256").update(noteContent).digest("hex").slice(0, 32);
-      const { error: insertError } = await supabase.from("training_data").insert({
+      const { error: insertError } = await supabase.from("training_data").upsert({
         field: item.field,
         note_content: noteContent,
         ai_feedback: feedback,
         content_hash: contentHash,
-      });
+      }, { onConflict: "content_hash" });
 
       if (insertError) {
-        console.error(`[training-generate] Insert error for ${item.id}:`, insertError.message);
+        console.error(`[training-generate] Upsert error for ${item.id}:`, insertError.message);
         return { id: item.id, status: "error", error: insertError.message };
       }
 
-      await supabase.from("raw_training_content").update({ processed: true }).eq("id", item.id);
+      const { error: updateError } = await supabase.from("raw_training_content").update({ processed: true }).eq("id", item.id);
+      if (updateError) {
+        console.error(`[training-generate] processed update error for ${item.id}:`, updateError.message);
+      }
       return { id: item.id, status: "success", field: item.field };
     } catch (err) {
       console.error(`[training-generate] Failed for ${item.id}:`, err.message);

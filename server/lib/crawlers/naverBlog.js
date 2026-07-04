@@ -29,6 +29,8 @@ async function crawl({ fields, timeBudget = 15000 } = {}) {
         const searchUrl = `https://m.search.naver.com/search.naver?where=m_blog&query=${encodeURIComponent(query)}`;
         const $ = await fetchHTML(searchUrl, { skipCache: true });
 
+        if (!$) continue;
+
         const links = [];
         $("a.api_txt_lines, a.title_link, a.sub_txt, a[href*='blog.naver.com']").each((i, el) => {
           if (links.length >= MAX_PER_QUERY) return false;
@@ -45,6 +47,7 @@ async function crawl({ fields, timeBudget = 15000 } = {}) {
             await randomDelay(300, 600);
             const mobileUrl = link.replace("blog.naver.com", "m.blog.naver.com");
             const detail$ = await fetchHTML(mobileUrl, { skipCache: true });
+        if (!detail$) continue;
 
             const title = cleanText(detail$(".se-title-text, .pcol1, h3.se_textarea, .tit_h3").first().text());
             const content = cleanText(

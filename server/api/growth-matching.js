@@ -1,9 +1,4 @@
-const { createClient } = require("@supabase/supabase-js");
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
+const { supabase } = require("../lib/supabase");
 
 /**
  * 유사 성장 궤적 매칭 API
@@ -14,13 +9,22 @@ const supabase = createClient(
  * - matches: [{ userId, field, similarity, potentialScore, pattern, trajectorySummary }]
  * - myVector: 내 특징 벡터
  */
+const { applySecurityChecks } = require("../lib/security");
+
 module.exports = async (req, res) => {
   // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-App-Token");
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+
+  // 보안: Rate limit (분당 15회) + App token
+  if (applySecurityChecks(req, res, { maxRequests: 15 })) return;
+
+  if (!supabase) {
+    return res.status(500).json({ error: "Server configuration error" });
+  }
 
   try {
     const { userId, field, limit = 10 } = req.body;
@@ -95,8 +99,8 @@ module.exports = async (req, res) => {
       myPotentialScore: myVector.potential_score,
     });
   } catch (err) {
-    console.error("Growth matching error:", err);
-    return res.status(500).json({ error: err.message });
+    console.error("[growth-matching] Error:", err.message);
+    return res.status(500).json({ error: "Matching failed" });
   }
 };
 

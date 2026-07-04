@@ -29,6 +29,8 @@ async function crawl({ fields, timeBudget = 15000 } = {}) {
         const searchUrl = `https://www.tistory.com/search?keyword=${encodeURIComponent(query)}`;
         const $ = await fetchHTML(searchUrl, { skipCache: true });
 
+        if (!$) continue;
+
         const links = [];
         $("a.link_post, a[href*='.tistory.com/']").each((i, el) => {
           if (links.length >= MAX_PER_QUERY) return false;
@@ -45,6 +47,7 @@ async function crawl({ fields, timeBudget = 15000 } = {}) {
           try {
             await randomDelay(300, 600);
             const detail$ = await fetchHTML(link, { skipCache: true });
+        if (!detail$) continue;
 
             const title = cleanText(
               detail$(".entry-title, .title_post, .tit_post, h1.title, article h1, .article-header h1").first().text()

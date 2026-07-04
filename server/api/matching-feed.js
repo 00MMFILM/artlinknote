@@ -1,4 +1,5 @@
 const { supabase } = require("../lib/supabase");
+const { applySecurityChecks } = require("../lib/security");
 
 // Self-healing: trigger crawl if data is stale (> 24 hours)
 async function triggerCrawlIfStale() {
@@ -30,9 +31,12 @@ module.exports = async function handler(req, res) {
   // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-App-Token");
 
   if (req.method === "OPTIONS") return res.status(200).end();
+
+  // 보안: Rate limit (분당 30회 — 목록 조회 빈도 높음) + App token
+  if (applySecurityChecks(req, res, { maxRequests: 30 })) return;
 
   if (!supabase) {
     return res.status(503).json({ error: "Database not configured" });
@@ -56,14 +60,17 @@ module.exports = async function handler(req, res) {
       .order("crawled_at", { ascending: false })
       .range(offset, offset + limitNum - 1);
 
-    // Filter by field(s)
+    // Filter by field(s) — 최대 10개 필드, 문자열만 허용
     const fields = userFields || (field ? [field] : null);
-    if (fields && fields.length > 0) {
-      query = query.in("field", fields);
+    if (fields && Array.isArray(fields) && fields.length > 0) {
+      const safeFields = fields.filter(f => typeof f === "string").slice(0, 10);
+      if (safeFields.length > 0) {
+        query = query.in("field", safeFields);
+      }
     }
 
-    // Filter by tab
-    if (tab) {
+    // Filter by tab — 문자열 타입 검증
+    if (tab && typeof tab === "string" && tab.length <= 50) {
       query = query.eq("tab", tab);
     }
 

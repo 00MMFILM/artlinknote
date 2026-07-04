@@ -10,6 +10,17 @@ const artculture = require("./artculture");
 const artmore = require("./artmore");
 const cine21 = require("./cine21");
 const wevity = require("./wevity");
+// New crawlers
+const mule = require("./mule");
+const playdb = require("./playdb");
+const themusical = require("./themusical");
+const artjob = require("./artjob");
+const arko = require("./arko");
+const munjang = require("./munjang");
+const kopis = require("./kopis");
+const culture = require("./culture");
+const castingdb = require("./castingdb");
+const danceinfo = require("./danceinfo");
 
 const ALL_CRAWLERS = [
   filmmakers,
@@ -24,6 +35,17 @@ const ALL_CRAWLERS = [
   artmore,
   cine21,
   wevity,
+  // New crawlers
+  mule,
+  playdb,
+  themusical,
+  artjob,
+  arko,
+  munjang,
+  kopis,
+  culture,
+  castingdb,
+  danceinfo,
 ];
 
 module.exports = { ALL_CRAWLERS };

@@ -22,14 +22,15 @@ module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST" && req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
-  // Auth
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = req.headers["authorization"] || "";
-    const vercelCron = req.headers["x-vercel-cron-secret"] || "";
-    if (authHeader !== `Bearer ${cronSecret}` && vercelCron !== cronSecret) {
-      return res.status(401).json({ error: "Unauthorized" });
+  // Auth — timing-safe 크론 인증
+  const { verifyCronAuth } = require("../lib/security");
+  const auth = verifyCronAuth(req);
+  if (!auth.ok) {
+    if (auth.reason === "CRON_SECRET not configured") {
+      console.error("[crawl-trigger] CRON_SECRET not configured");
+      return res.status(500).json({ error: "Server configuration error" });
     }
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   // Support ?source=filmmakers to run a single crawler

@@ -73,6 +73,8 @@ async function fetchBlogContent(url) {
 
   const $ = await fetchHTML(fetchUrl, { skipCache: true });
 
+  if (!$) return "";
+
   if (url.includes("blog.naver.com") || url.includes("m.blog.naver.com")) {
     return cleanText($(".se-main-container, .post-view, #postViewArea, .se_component_wrap").first().text());
   } else if (url.includes("tistory.com")) {
@@ -128,7 +130,7 @@ async function crawl({ fields, timeBudget = 45000 } = {}) {
             results.push({
               source: SOURCE,
               source_url: blogUrl,
-              field: classifyField(`${apiTitle} ${content}`) || field,
+              field: classifyField(`${apiTitle} ${content}`, field) || field,
               title: apiTitle || query,
               content: content.slice(0, 5000),
             });
@@ -138,7 +140,7 @@ async function crawl({ fields, timeBudget = 45000 } = {}) {
               results.push({
                 source: SOURCE,
                 source_url: blogUrl,
-                field: classifyField(`${apiTitle} ${apiDesc}`) || field,
+                field: classifyField(`${apiTitle} ${apiDesc}`, field) || field,
                 title: apiTitle || query,
                 content: apiDesc.slice(0, 5000),
               });

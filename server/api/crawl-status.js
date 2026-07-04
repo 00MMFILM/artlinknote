@@ -1,13 +1,17 @@
 const { supabase } = require("../lib/supabase");
+const { applySecurityChecks } = require("../lib/security");
 
 module.exports = async function handler(req, res) {
   // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-App-Token");
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+
+  // 보안: Rate limit (분당 20회) + App token
+  if (applySecurityChecks(req, res, { maxRequests: 20 })) return;
 
   if (!supabase) {
     return res.status(503).json({ error: "Database not configured" });

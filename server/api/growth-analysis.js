@@ -1,9 +1,4 @@
-const { createClient } = require("@supabase/supabase-js");
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
+const { supabase } = require("../lib/supabase");
 
 /**
  * 시계열 성장 궤적 분석 API
@@ -16,13 +11,22 @@ const supabase = createClient(
  * - potentialScore: 성장 잠재력 종합 점수
  * - vector: 특징 벡터
  */
+const { applySecurityChecks } = require("../lib/security");
+
 module.exports = async (req, res) => {
   // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-App-Token");
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+
+  // 보안: Rate limit (분당 15회) + App token
+  if (applySecurityChecks(req, res, { maxRequests: 15 })) return;
+
+  if (!supabase) {
+    return res.status(500).json({ error: "Server configuration error" });
+  }
 
   try {
     const { userId, field, scores } = req.body;
@@ -123,9 +127,13 @@ module.exports = async (req, res) => {
       updated_at: new Date().toISOString(),
     };
 
-    await supabase
+    const { error: upsertError } = await supabase
       .from("growth_vectors")
       .upsert(vectorData, { onConflict: "user_id,field" });
+
+    if (upsertError) {
+      console.error("[growth-analysis] upsert error:", upsertError.message);
+    }
 
     return res.status(200).json({
       trajectory,
@@ -140,8 +148,8 @@ module.exports = async (req, res) => {
       ),
     });
   } catch (err) {
-    console.error("Growth analysis error:", err);
-    return res.status(500).json({ error: err.message });
+    console.error("[growth-analysis] Error:", err.message);
+    return res.status(500).json({ error: "Analysis failed" });
   }
 };
 

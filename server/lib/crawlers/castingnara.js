@@ -11,6 +11,7 @@ async function crawl() {
   await randomDelay(500, 1500);
 
   const $ = await fetchHTML(LIST_URL, { skipCache: true });
+  if (!$) return [];
   const items = [];
 
   // castingnara.com uses guin_detail.php?num=... for individual posts
@@ -59,6 +60,7 @@ async function crawl() {
   for (const item of unique.slice(0, MAX_ITEMS)) {
     try {
       const detail$ = await fetchHTML(item.source_url);
+        if (!detail$) continue;
       const bodyText = cleanText(
         detail$(".view-content, .guin_detail, .detail_content, td, .content, article").first().text()
       );

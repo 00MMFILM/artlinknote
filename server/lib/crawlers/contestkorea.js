@@ -19,6 +19,7 @@ async function crawl() {
     try {
       const url = `${BASE_URL}/sub/list.php?int_gbn=1&Txt_bcode=${cat.code}&Ession=available`;
       const $ = await fetchHTML(url);
+  if (!$) return [];
       const items = [];
 
       // ContestKorea uses list items with links to view.php
@@ -95,6 +96,7 @@ async function crawl() {
   for (const item of allItems.slice(0, MAX_ITEMS)) {
     try {
       const detail$ = await fetchHTML(item.source_url);
+        if (!detail$) continue;
       const bodyText = cleanText(
         detail$(".view_content, .contest_view, .board_view, article, #contents, .sub_content").first().text()
       );

@@ -1,5 +1,38 @@
 const cheerio = require("cheerio");
+const robotsParser = require("robots-parser");
 const { supabase } = require("./supabase");
+
+// --- robots.txt Cache ---
+
+const _robotsCache = new Map();
+const ROBOTS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+async function isAllowedByRobots(url) {
+  try {
+    const origin = new URL(url).origin;
+    const cached = _robotsCache.get(origin);
+    if (cached && Date.now() - cached.ts < ROBOTS_CACHE_TTL) {
+      return cached.robots.isAllowed(url, "ArtlinkBot") !== false;
+    }
+
+    const robotsUrl = `${origin}/robots.txt`;
+    const res = await fetch(robotsUrl, {
+      headers: { "User-Agent": "ArtlinkBot" },
+      signal: AbortSignal.timeout(5000),
+    });
+
+    let robotsTxt = "";
+    if (res.ok) robotsTxt = await res.text();
+
+    const robots = robotsParser(robotsUrl, robotsTxt);
+    _robotsCache.set(origin, { robots, ts: Date.now() });
+
+    return robots.isAllowed(url, "ArtlinkBot") !== false;
+  } catch {
+    // robots.txt 접근 실패 시 허용 (관례)
+    return true;
+  }
+}
 
 // --- Anti-Detection: UA Rotation ---
 
@@ -54,26 +87,34 @@ const FIELD_KEYWORDS = {
   acting: [
     "배우", "연기", "캐스팅", "드라마", "출연", "엑스트라", "단역", "주연",
     "조연", "성우", "보이스", "시트콤", "연극", "뮤지컬배우", "오디션",
+    "대본", "캐릭터 분석", "장면", "동선", "감정연기", "즉흥", "합독",
+    "셀프테이프", "모노로그",
   ],
   music: [
     "음악", "보컬", "작곡", "연주", "밴드", "합창", "오케스트라", "피아노",
-    "기타", "클래식", "뮤지컬", "싱어", "가수", "음악극",
+    "기타 연습", "기타 레슨", "기타리스트", "어쿠스틱", "일렉기타", "클래식기타",
+    "클래식", "싱어", "가수", "악보", "음계", "코드 진행", "코드 연습",
+    "청음", "박자", "합주", "바이올린", "드럼", "미디", "발성연습",
+    "노래 레슨", "음악학원", "보컬 레슨", "보컬 연습", "음정", "리듬",
+    "화성학", "작사",
   ],
   dance: [
     "무용", "댄스", "발레", "한국무용", "현대무용", "안무", "댄서",
-    "스트릿댄스", "방송댄스", "피지컬시어터",
+    "스트릿댄스", "방송댄스", "피지컬시어터", "턴", "컨디셔닝",
+    "왁킹", "팝핑", "힙합댄스", "컨템포러리",
   ],
   art: [
-    "미술", "전시", "회화", "조각", "설치", "공예", "디자인", "일러스트",
-    "사진", "갤러리", "레지던시", "미디어아트", "디지털아트",
+    "미술", "전시", "회화", "조각", "설치", "공예", "일러스트",
+    "갤러리", "레지던시", "미디어아트", "디지털아트", "드로잉", "크로키",
+    "스케치", "수채화", "유화", "데생", "아크릴화",
   ],
   film: [
-    "영상", "촬영", "감독", "시나리오", "단편", "다큐", "영화", "장편",
-    "단편영화", "스태프", "조명", "녹음", "편집",
+    "영상 제작", "촬영", "감독", "시나리오", "단편영화", "다큐", "영화", "장편",
+    "조명", "녹음", "영상 편집", "콘티", "촬영일지", "색보정",
   ],
   literature: [
-    "문학", "소설", "시", "수필", "글쓰기", "웹소설", "시인", "작가",
-    "문예", "원고", "출판", "시낭독",
+    "문학", "소설", "시 창작", "수필", "글쓰기", "웹소설", "시인", "작가",
+    "문예", "원고", "출판", "시낭독", "집필", "퇴고", "초고", "에세이", "필사",
   ],
 };
 
@@ -92,11 +133,10 @@ function isStaffJob(text) {
 }
 
 function classifyField(text, defaultField) {
-  const fallback = defaultField || "acting";
-  if (!text) return fallback;
+  if (!text) return defaultField || null;
 
-  // If it's a staff/hiring post, never classify as acting
-  const staffJob = isStaffJob(text);
+  // If it's a staff/hiring post, classify as "etc"
+  if (isStaffJob(text)) return "etc";
 
   const scores = {};
   for (const [field, keywords] of Object.entries(FIELD_KEYWORDS)) {
@@ -104,14 +144,8 @@ function classifyField(text, defaultField) {
   }
   const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
 
-  let result = best[1] > 0 ? best[0] : fallback;
-
-  // Staff/hiring posts go to "etc" (기타) category
-  if (staffJob) {
-    result = "etc";
-  }
-
-  return result;
+  // 키워드 매칭이 없으면 defaultField 사용 (acting fallback 제거)
+  return best[1] > 0 ? best[0] : (defaultField || null);
 }
 
 // --- Tab Classification ---
@@ -160,7 +194,16 @@ function extractRequirements(text) {
 
 // --- HTML Fetching (with UA rotation, caching, browser-like headers) ---
 
-async function fetchHTML(url, { skipCache = false } = {}) {
+async function fetchHTML(url, { skipCache = false, skipRobots = false } = {}) {
+  // Check robots.txt before crawling
+  if (!skipRobots) {
+    const allowed = await isAllowedByRobots(url);
+    if (!allowed) {
+      console.log(`[robots.txt] blocked: ${url}`);
+      return null;
+    }
+  }
+
   // Check cache first — avoid duplicate requests within 6h window
   if (!skipCache) {
     const cached = getCachedHTML(url);
@@ -241,14 +284,18 @@ async function upsertPostings(postings, source) {
 
 async function logCrawl(source, { itemsFound = 0, itemsNew = 0, status = "success", error = null } = {}) {
   if (!supabase) return;
-  await supabase.from("crawl_logs").insert({
-    source,
-    finished_at: new Date().toISOString(),
-    items_found: itemsFound,
-    items_new: itemsNew,
-    status,
-    error_message: error,
-  });
+  try {
+    await supabase.from("crawl_logs").insert({
+      source,
+      finished_at: new Date().toISOString(),
+      items_found: itemsFound,
+      items_new: itemsNew,
+      status,
+      error_message: error,
+    });
+  } catch (e) {
+    console.error("[crawlerBase] logCrawl failed:", e.message);
+  }
 }
 
 // --- Training Content Quality Filter ---
@@ -269,6 +316,10 @@ const AD_REJECT_KEYWORDS = [
   "할인링크", "구매링크", "핫딜", "타임세일",
   // 체험단 플랫폼명
   "레뷰", "리뷰노트", "태그바이", "리뷰플레이스",
+  // 교육/과외 스팸
+  "수학과외", "영어과외", "국어과외", "과학과외", "과외 전문",
+  "1:1 수학", "입시학원", "내신 대비", "수능 대비", "족집게 과외",
+  "지역 최강", "명문 과외", "밀착 수업", "개별화 특화",
 ];
 
 // 연습일지 관련 키워드 (최소 1개 이상 포함 필수)
@@ -375,6 +426,7 @@ async function expireOldPostings() {
 
 module.exports = {
   fetchHTML,
+  isAllowedByRobots,
   upsertPostings,
   upsertRawTraining,
   logCrawl,

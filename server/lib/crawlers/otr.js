@@ -10,6 +10,7 @@ const SKIP_CATEGORIES = ["공지사항"];
 
 async function crawl() {
   const $ = await fetchHTML(LIST_URL);
+  if (!$) return [];
   const items = [];
 
   // OTR uses mangboard (WordPress plugin) with table-based listing
@@ -73,6 +74,7 @@ async function crawl() {
   for (const item of unique) {
     try {
       const detail$ = await fetchHTML(item.source_url);
+        if (!detail$) continue;
       const bodyText = cleanText(
         detail$(".view_content, .read_body, article, .board_view, #bo_v_con, .entry-content").first().text()
       );

@@ -17,6 +17,8 @@ async function crawl() {
     try {
       const $ = await fetchHTML(cat.url);
 
+      if (!$) continue;
+
       // Wevity uses links with ix= parameter for contest entries
       $("a[href*='ix=']").each((i, el) => {
         if (items.length >= MAX_ITEMS) return false;

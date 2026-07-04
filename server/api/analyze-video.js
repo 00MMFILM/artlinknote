@@ -41,16 +41,21 @@ const VIDEO_FEW_SHOT = {
 🎯 대화체 부분에서 캐릭터별 목소리 차이를 더 뚜렷하게 하면 몰입감이 높아져요. 각 캐릭터의 '음성 시그니처'를 확립하세요 — A는 저음+느린 리듬+gentle 톤, B는 고음+빠른 리듬+firm 톤. 대사만 들어도 누가 말하는지 구분되는 수준을 목표로 하세요.`,
 };
 
+const { applySecurityChecks } = require("../lib/security");
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-App-Token");
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
+  // 보안: Rate limit (분당 5회 — 비용 높은 API) + App token
+  if (applySecurityChecks(req, res, { maxRequests: 5 })) return;
+
   if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: "API key not configured" });
+    return res.status(500).json({ error: "Server configuration error" });
   }
 
   try {
@@ -58,6 +63,21 @@ module.exports = async function handler(req, res) {
 
     if (!prompt || !frames || frames.length === 0) {
       return res.status(400).json({ error: "prompt and frames are required" });
+    }
+
+    // 이미지 페이로드 제한 — DoS 및 과금 폭탄 방지
+    if (frames.length > 10) {
+      return res.status(400).json({ error: "Maximum 10 frames allowed" });
+    }
+    for (const frame of frames) {
+      if (typeof frame !== "string" || frame.length > 2 * 1024 * 1024) {
+        return res.status(400).json({ error: "Each frame must be under 2MB" });
+      }
+    }
+
+    // 프롬프트 길이 제한
+    if (prompt.length > 5000) {
+      return res.status(400).json({ error: "Prompt too long" });
     }
 
     const fewShot = VIDEO_FEW_SHOT[field] || VIDEO_FEW_SHOT.acting;
