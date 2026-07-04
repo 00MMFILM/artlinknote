@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "regions": ["icn1"],
   "functions": {
     "api/ai-analyze.js": {
       "maxDuration": 60
@@ -8,6 +9,15 @@
       "maxDuration": 120
     },
     "api/transcribe.js": {
+      "maxDuration": 120
+    },
+    "api/crawl-trigger.js": {
+      "maxDuration": 120
+    },
+    "api/training-crawl.js": {
+      "maxDuration": 120
+    },
+    "api/training-generate.js": {
       "maxDuration": 120
     }
   },
@@ -67,6 +77,10 @@
     {
       "source": "/api/auth-callback",
       "destination": "/api/auth-callback.js"
+    },
+    {
+      "source": "/api/moderate",
+      "destination": "/api/moderate.js"
     }
   ],
   "crons": [
