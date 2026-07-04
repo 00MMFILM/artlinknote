@@ -27,6 +27,10 @@
       "destination": "/api/crawl-trigger.js"
     },
     {
+      "source": "/api/probe",
+      "destination": "/api/probe.js"
+    },
+    {
       "source": "/api/crawl-status",
       "destination": "/api/crawl-status.js"
     },
