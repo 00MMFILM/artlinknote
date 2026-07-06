@@ -33,6 +33,10 @@
       "destination": "/api/schema-check.js"
     },
     {
+      "source": "/api/daily-tip",
+      "destination": "/api/daily-tip.js"
+    },
+    {
       "source": "/api/crawl-status",
       "destination": "/api/crawl-status.js"
     },
@@ -189,6 +193,10 @@
     {
       "path": "/api/schema-check",
       "schedule": "17 0 * * *"
+    },
+    {
+      "path": "/api/daily-tip",
+      "schedule": "7 23 * * *"
     }
   ]
 }
